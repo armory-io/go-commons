@@ -33,5 +33,5 @@ func main() {
 	// Registering handlers
 	r := mux.NewRouter()
 	r.HandleFunc("/", PathHandler)
-	http.Handle("/", ps.ArmoryCloudPrincipalMiddleware(r))
+	r.Use(ps.ArmoryCloudPrincipalMiddleware)
 }

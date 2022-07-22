@@ -47,7 +47,7 @@ func TestClientRetry(t *testing.T) {
 	assert.Equal(t, "success", creds.Host)
 }
 
-func Test_that_k8s_can_use_cluster_credentials_and_uses_refreshed_token(t *testing.T) {
+func TestProxiedClient(t *testing.T) {
 	token := os.Getenv("ARMORY_CLOUD_TOKEN")
 	if len(token) < 1 {
 		t.Skip()
@@ -99,7 +99,7 @@ func Test_that_k8s_can_use_cluster_credentials_and_uses_refreshed_token(t *testi
 	t.Logf("There are %d pods in the cluster\n", len(pods.Items))
 }
 
-func TestGetProxyEnabledClusterConfig(t *testing.T) {
+func TestGetProxyEnabledClusterConfigError(t *testing.T) {
 	token := os.Getenv("ARMORY_CLOUD_TOKEN")
 	if len(token) < 1 {
 		t.Skip()
@@ -127,7 +127,7 @@ func TestGetProxyEnabledClusterConfig(t *testing.T) {
 	assert.ErrorIs(t, err, ErrAgentNotFound)
 }
 
-func TestGetProxyFunction(t *testing.T) {
+func TestGetProxyFunctionError(t *testing.T) {
 	token := os.Getenv("ARMORY_CLOUD_TOKEN")
 	if len(token) < 1 {
 		t.Skip()

@@ -4,10 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/mitchellh/mapstructure"
 	"net/http"
 	"strings"
-
-	"github.com/mitchellh/mapstructure"
 )
 
 const (

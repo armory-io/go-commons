@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/armory-io/lib-go-armory-cloud-commons/wormhole/logUtils"
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/hashicorp/go-retryablehttp"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/net/http/httpproxy"
 	"io"
 	"k8s.io/client-go/rest"
@@ -26,10 +28,18 @@ var (
 	ErrCredentialFetchNotSupportedByAgent = errors.New("agent does not support credentials fetching")
 )
 
+func NewWithLogrusLogger(baseURL string, overrides *SessionOverrides, tokenSupplier tokenSupplier, log *logrus.Logger) *WormholeService {
+	return new(baseURL, overrides, tokenSupplier, logUtils.CreateLeveledLoggerFromLogrusLogger(log))
+}
+
 func New(baseURL string, overrides *SessionOverrides, tokenSupplier tokenSupplier) *WormholeService {
+	return new(baseURL, overrides, tokenSupplier, log.New(os.Stderr, "", log.LstdFlags))
+}
+
+func new(baseURL string, overrides *SessionOverrides, tokenSupplier tokenSupplier, log interface{}) *WormholeService {
 	client := &retryablehttp.Client{
 		HTTPClient:   cleanhttp.DefaultClient(),
-		Logger:       log.New(os.Stderr, "", log.LstdFlags),
+		Logger:       log,
 		RetryWaitMin: 0,
 		RetryWaitMax: 0,
 		RetryMax:     20,
