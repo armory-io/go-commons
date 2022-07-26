@@ -2,7 +2,8 @@ package iam
 
 import (
 	"encoding/json"
-	"errors"
+	armoryhttp "github.com/armory-io/lib-go-armory-cloud-commons/http"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
@@ -25,11 +26,10 @@ func (j *MockJwtFetcher) Fetch(t []byte) (interface{}, interface{}, error) {
 	return token, nil, nil
 }
 
-func TestArmoryCloudPrincipalMiddleware(test *testing.T) {
+func TestGinPrincipalMiddleware(test *testing.T) {
 	type PrincipalServiceTest struct {
 		desc       string
 		fetcher    *MockJwtFetcher
-		validators []PrincipalValidator
 		headers    map[string]string
 		statusCode int
 		errorMsg   string
@@ -41,11 +41,6 @@ func TestArmoryCloudPrincipalMiddleware(test *testing.T) {
 			fetcher: &MockJwtFetcher{},
 			headers: map[string]string{
 				"Authorization": "Bearer ulice",
-			},
-			validators: []PrincipalValidator{
-				func(p *ArmoryCloudPrincipal) error {
-					return nil
-				},
 			},
 			statusCode: http.StatusOK,
 		},
@@ -82,37 +77,6 @@ func TestArmoryCloudPrincipalMiddleware(test *testing.T) {
 			},
 			statusCode: http.StatusOK,
 		},
-		{
-			desc:    "should reject failed validators",
-			fetcher: &MockJwtFetcher{},
-			headers: map[string]string{
-				"Authorization": "Bearer ulice",
-			},
-			validators: []PrincipalValidator{
-				func(p *ArmoryCloudPrincipal) error {
-					return errors.New("failed validation")
-				},
-			},
-			statusCode: http.StatusForbidden,
-			errorMsg:   "failed validation",
-		},
-		{
-			desc:    "should run multiple validators",
-			fetcher: &MockJwtFetcher{},
-			headers: map[string]string{
-				"Authorization": "Bearer ulice",
-			},
-			validators: []PrincipalValidator{
-				func(p *ArmoryCloudPrincipal) error {
-					return nil
-				},
-				func(p *ArmoryCloudPrincipal) error {
-					return errors.New("failed validation")
-				},
-			},
-			statusCode: http.StatusForbidden,
-			errorMsg:   "failed validation",
-		},
 	}
 
 	for _, c := range cases {
@@ -120,33 +84,47 @@ func TestArmoryCloudPrincipalMiddleware(test *testing.T) {
 			a := &ArmoryCloudPrincipalService{
 				JwtFetcher: c.fetcher,
 			}
-			if c.validators != nil {
-				a.Validators = c.validators
-			}
-			h := a.ArmoryCloudPrincipalMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				p, err := ExtractPrincipalFromContext(r.Context())
+
+			g := gin.Default()
+
+			g.Use(GinAuthMiddleware(a))
+			g.Use(func(gc *gin.Context) {
+				p, err := ExtractPrincipalFromContext(gc.Request.Context())
 				assert.NoError(t, err, "Downstream should always have a principal in the request context")
 				assert.NotNilf(t, p, "Downstream should always have a principal in the request context")
 				if c.errorMsg != "" {
 					assert.Equal(t, true, false, "Should never reach next handler in the chain")
 				}
-			}))
-			r := httptest.NewRequest(http.MethodGet, "http://armory.io/", nil)
+			})
+
+			g.GET("/", func(gc *gin.Context) {
+				gc.JSON(200, map[string]string{
+					"hello": "from the other side",
+				})
+			})
+
+			s := httptest.NewServer(g)
+
+			r, err := http.NewRequest(http.MethodGet, s.URL, nil)
+			assert.NoError(t, err)
+
 			for k, v := range c.headers {
 				r.Header.Add(k, v)
 			}
-			recorder := httptest.NewRecorder()
-			h.ServeHTTP(recorder, r)
 
-			assert.Equal(t, c.statusCode, recorder.Code)
-			var out struct {
-				Message string `json:"error"`
-			}
+			response, err := http.DefaultClient.Do(r)
+			assert.NoError(t, err)
+
+			assert.Equal(t, c.statusCode, response.StatusCode)
 			if c.statusCode >= 400 {
-				if err := json.NewDecoder(recorder.Result().Body).Decode(&out); err != nil {
+				defer func() { assert.NoError(t, response.Body.Close()) }()
+
+				var out armoryhttp.BackstopError
+				if err := json.NewDecoder(response.Body).Decode(&out); err != nil {
 					t.Fatal(err.Error())
 				}
-				assert.Equal(t, c.errorMsg, out.Message)
+
+				assert.Equal(t, c.errorMsg, out.Errors[0].Message)
 			}
 
 			if c.assertion != nil {

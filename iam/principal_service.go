@@ -16,20 +16,20 @@ const (
 	proxiedAuthorizationHeader         = "X-Armory-Proxied-Authorization"
 )
 
+var (
+	ErrUnauthorized = errors.New("unauthorized")
+)
+
 type principalContextKey struct{}
 
 type ArmoryCloudPrincipalService struct {
 	JwtFetcher JwtFetcher
-	Validators []PrincipalValidator
 }
 
-// PrincipalValidator is used by ArmoryCloudPrincipalMiddleware for principal scope and property validation required for authZ by a service
-type PrincipalValidator func(p *ArmoryCloudPrincipal) error
-
-// CreatePrincipalServiceInstance downloads JWKS from the Armory Auth Server & populates the JWK Cache for principal verification
-func CreatePrincipalServiceInstance(issuer string, v ...PrincipalValidator) (*ArmoryCloudPrincipalService, error) {
+// New creates an ArmoryCloudPrincipalService. It downloads JWKS from the Armory Auth Server & populates the JWK Cache for principal verification.
+func New(settings Settings) (*ArmoryCloudPrincipalService, error) {
 	jt := &JwtToken{
-		issuer: issuer,
+		issuer: settings.JWT.JWTKeysURL,
 	}
 
 	// Download JWKs from Armory Auth Server
@@ -39,34 +39,7 @@ func CreatePrincipalServiceInstance(issuer string, v ...PrincipalValidator) (*Ar
 
 	return &ArmoryCloudPrincipalService{
 		JwtFetcher: jt,
-		Validators: v,
 	}, nil
-}
-
-func (a *ArmoryCloudPrincipalService) ArmoryCloudPrincipalMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth, err := extractBearerToken(r)
-		if err != nil {
-			errWriter(w, http.StatusUnauthorized, err.Error())
-			return
-		}
-		// verify principal
-		p, err := a.ExtractAndVerifyPrincipalFromTokenString(strings.TrimPrefix(auth, fmt.Sprintf("%s ", bearerPrefix)))
-		if err != nil {
-			errWriter(w, http.StatusForbidden, err.Error())
-			return
-		}
-		// additional validation (ie scopes, jwt properties)
-		for _, validator := range a.Validators {
-			if err := validator(p); err != nil {
-				errWriter(w, http.StatusForbidden, err.Error())
-				return
-			}
-		}
-		// add the principal to the request context for downstream use
-		requestWithPrincipal := r.WithContext(context.WithValue(r.Context(), principalContextKey{}, *p))
-		next.ServeHTTP(w, requestWithPrincipal)
-	})
 }
 
 // ExtractPrincipalFromContext can be used by any handler or downstream middleware of the ArmoryCloudPrincipalMiddleware
