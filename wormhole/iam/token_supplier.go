@@ -16,6 +16,7 @@ type accessTokenResponse struct {
 	ExpiresIn   int32  `json:"expires_in"`
 }
 
+// AccessToken it does things with stuff
 type AccessToken struct {
 	AccessToken string
 	TokenType   string
