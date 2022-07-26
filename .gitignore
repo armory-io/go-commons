@@ -1,2 +1,5 @@
 .idea
 *.iml
+
+report.json
+profile.cov
