@@ -8,7 +8,7 @@ name: Create Github Release
 on:
   push:
     branches:
-      - master
+      - main
 
 jobs:
   create-release:
