@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2022 Armory, Inc
+ *   National Electronics and Computer Technology Center, Thailand
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package secrets
 
 import (
@@ -181,7 +198,7 @@ func TestVaultDecrypter_fetchSecret(t *testing.T) {
 				v1response: versionedResponse{
 					expectedPath: engine + "/" + path,
 					response:     &api.Secret{Warnings: []string{"Invalid path for a versioned K/V secrets engine"}},
-					err: nil,
+					err:          nil,
 				},
 				v2response: versionedResponse{
 					expectedPath: engine + "/data/" + path,
@@ -196,7 +213,7 @@ func TestVaultDecrypter_fetchSecret(t *testing.T) {
 				v1response: versionedResponse{
 					expectedPath: engine + "/" + path,
 					response:     &api.Secret{Warnings: []string{"Invalid path for a versioned K/V secrets engine"}},
-					err: nil,
+					err:          nil,
 				},
 				v2response: versionedResponse{
 					expectedPath: engine + "/data/" + path,
@@ -225,7 +242,7 @@ func TestVaultDecrypter_fetchSecret(t *testing.T) {
 				v1response: versionedResponse{
 					expectedPath: engine + "/" + path,
 					response:     &api.Secret{Warnings: []string{"Invalid path for a versioned K/V secrets engine"}},
-					err: nil,
+					err:          nil,
 				},
 				v2response: versionedResponse{
 					expectedPath: engine + "/data/" + path,
@@ -260,10 +277,10 @@ func TestVaultDecrypter_fetchSecret(t *testing.T) {
 
 func TestUserPassAuth(t *testing.T) {
 	cases := map[string]struct {
-		config       VaultConfig
-		client       *MockVaultClient
-		expectedPath string
-		expectedData map[string]interface{}
+		config        VaultConfig
+		client        *MockVaultClient
+		expectedPath  string
+		expectedData  map[string]interface{}
 		expectedError string
 	}{
 		"happy path": {
@@ -283,9 +300,9 @@ func TestUserPassAuth(t *testing.T) {
 					},
 				},
 			},
-			expectedPath: "auth/path/login/user",
-			expectedData: map[string]interface{}{"password": "password"},
-			expectedError:  "",
+			expectedPath:  "auth/path/login/user",
+			expectedData:  map[string]interface{}{"password": "password"},
+			expectedError: "",
 		},
 		"error from client gets returned": {
 			config: VaultConfig{
@@ -300,9 +317,9 @@ func TestUserPassAuth(t *testing.T) {
 				token:    "",
 				writeErr: errors.New("some error"),
 			},
-			expectedPath: "auth/path/login/user",
-			expectedData: map[string]interface{}{"password": "password"},
-			expectedError:  "error logging into vault:",
+			expectedPath:  "auth/path/login/user",
+			expectedData:  map[string]interface{}{"password": "password"},
+			expectedError: "error logging into vault:",
 		},
 		"connection error from client gets caught": {
 			config: VaultConfig{
@@ -317,9 +334,9 @@ func TestUserPassAuth(t *testing.T) {
 				token:    "",
 				writeErr: &json.SyntaxError{},
 			},
-			expectedPath: "auth/path/login/user",
-			expectedData: map[string]interface{}{"password": "password"},
-			expectedError:  "check connection to the server",
+			expectedPath:  "auth/path/login/user",
+			expectedData:  map[string]interface{}{"password": "password"},
+			expectedError: "check connection to the server",
 		},
 	}
 	for testName, c := range cases {
@@ -357,7 +374,7 @@ func TestKubernetesAuth(t *testing.T) {
 		expectedPath  string
 		expectedData  map[string]interface{}
 		expectedToken string
-		expectedError   string
+		expectedError string
 	}{
 		"happy path": {
 			config: VaultConfig{
@@ -419,9 +436,8 @@ func TestKubernetesAuth(t *testing.T) {
 				"role": "role",
 				"jwt":  mockJwt,
 			},
-			expectedError:  "check connection to the server",
+			expectedError: "check connection to the server",
 		},
-
 	}
 	for testName, c := range cases {
 		t.Run(testName, func(t *testing.T) {
@@ -488,7 +504,7 @@ func TestValidateVaultConfig(t *testing.T) {
 			wantErr: true,
 		},
 		"empty config": {
-			config: VaultConfig{},
+			config:  VaultConfig{},
 			wantErr: true,
 		},
 		"missing URL": {
@@ -890,17 +906,17 @@ func TestParseVaultSecret(t *testing.T) {
 
 func TestRetryableError(t *testing.T) {
 	cases := map[string]struct {
-		secret        *api.Secret
-		err error
-		expectedResult   bool
+		secret         *api.Secret
+		err            error
+		expectedResult bool
 	}{
 		"permission denied error returns true": {
-			secret: nil,
-			err: errors.New("permission denied"),
+			secret:         nil,
+			err:            errors.New("permission denied"),
 			expectedResult: true,
 		},
 		"nil mapping returns true": {
-			secret: nil,
+			secret:         nil,
 			expectedResult: true,
 		},
 		"invalid path warning returns true": {
@@ -929,6 +945,3 @@ func TestRetryableError(t *testing.T) {
 		})
 	}
 }
-
-
-

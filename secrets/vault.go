@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2022 Armory, Inc
+ *   National Electronics and Computer Technology Center, Thailand
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package secrets
 
 import (
@@ -98,8 +115,8 @@ func (u UserPassTokenFetcher) fetchToken(client VaultClient) (string, error) {
 }
 
 type KubernetesServiceAccountTokenFetcher struct {
-	role string
-	path string
+	role       string
+	path       string
 	fileReader fileReader
 }
 
@@ -142,8 +159,8 @@ func (decrypter *VaultDecrypter) setTokenFetcher() error {
 		tokenFetcher = EnvironmentVariableTokenFetcher{}
 	case "KUBERNETES":
 		tokenFetcher = KubernetesServiceAccountTokenFetcher{
-			role: decrypter.vaultConfig.Role,
-			path: decrypter.vaultConfig.Path,
+			role:       decrypter.vaultConfig.Role,
+			path:       decrypter.vaultConfig.Path,
 			fileReader: ioutil.ReadFile,
 		}
 	case "USERPASS":
@@ -296,7 +313,6 @@ func (decrypter *VaultDecrypter) newAPIClient() (*api.Client, error) {
 	}
 	return client, nil
 }
-
 
 func (decrypter *VaultDecrypter) fetchSecret(client VaultClient) (string, error) {
 	path := decrypter.engine + "/" + decrypter.path
