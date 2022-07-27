@@ -2,7 +2,7 @@ package iam
 
 import (
 	"encoding/json"
-	armoryhttp "github.com/armory-io/lib-go-armory-cloud-commons/http"
+	armoryhttp "github.com/armory-io/go-commons/http"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"net/http"

@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/armory-io/lib-go-armory-cloud-commons/secrets"
+	"github.com/armory-io/go-commons/secrets"
 
 	"github.com/imdario/mergo"
 	log "github.com/sirupsen/logrus"

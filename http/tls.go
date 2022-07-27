@@ -7,7 +7,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"github.com/armory-io/lib-go-armory-cloud-commons/secrets"
+	"github.com/armory-io/go-commons/secrets"
 	"io/ioutil"
 	"os"
 )

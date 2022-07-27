@@ -1,11 +1,10 @@
-module github.com/armory-io/lib-go-armory-cloud-commons
+module github.com/armory-io/go-commons
 
 go 1.18
 
 require (
 	cloud.google.com/go/storage v1.10.0
 	github.com/aws/aws-sdk-go v1.44.61
-	github.com/fsnotify/fsnotify v1.4.9
 	github.com/gin-gonic/gin v1.8.1
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/golang-migrate/migrate/v4 v4.15.2
@@ -23,12 +22,12 @@ require (
 	github.com/uber-go/tally/v4 v4.1.2
 	go.uber.org/fx v1.17.1
 	go.uber.org/multierr v1.8.0
+	go.uber.org/zap v1.21.0
 	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e
 	golang.org/x/net v0.0.0-20220722155237-a158d28d115b
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/apimachinery v0.24.3
 	k8s.io/client-go v0.24.3
-	k8s.io/klog/v2 v2.60.1
 )
 
 require (
@@ -110,7 +109,6 @@ require (
 	go.opencensus.io v0.23.0 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/dig v1.14.0 // indirect
-	go.uber.org/zap v1.21.0 // indirect
 	golang.org/x/crypto v0.0.0-20220722155217-630584e8d5aa // indirect
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8 // indirect
 	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f // indirect
@@ -127,6 +125,7 @@ require (
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/api v0.24.3 // indirect
+	k8s.io/klog/v2 v2.60.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20220328201542-3ee0da9b0b42 // indirect
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9 // indirect
 	sigs.k8s.io/json v0.0.0-20211208200746-9f7c6b3444d2 // indirect

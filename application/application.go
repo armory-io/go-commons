@@ -1,12 +1,12 @@
 package application
 
 import (
-	"github.com/armory-io/lib-go-armory-cloud-commons/gin"
-	armoryhttp "github.com/armory-io/lib-go-armory-cloud-commons/http"
-	"github.com/armory-io/lib-go-armory-cloud-commons/iam"
-	"github.com/armory-io/lib-go-armory-cloud-commons/logging"
-	"github.com/armory-io/lib-go-armory-cloud-commons/metrics"
-	"github.com/armory-io/lib-go-armory-cloud-commons/mysql"
+	"github.com/armory-io/go-commons/gin"
+	armoryhttp "github.com/armory-io/go-commons/http"
+	"github.com/armory-io/go-commons/iam"
+	"github.com/armory-io/go-commons/logging"
+	"github.com/armory-io/go-commons/metrics"
+	"github.com/armory-io/go-commons/mysql"
 	"go.uber.org/fx"
 )
 

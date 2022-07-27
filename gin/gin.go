@@ -2,9 +2,9 @@ package gin
 
 import (
 	"context"
-	armoryhttp "github.com/armory-io/lib-go-armory-cloud-commons/http"
-	"github.com/armory-io/lib-go-armory-cloud-commons/iam"
-	"github.com/armory-io/lib-go-armory-cloud-commons/metrics"
+	armoryhttp "github.com/armory-io/go-commons/http"
+	"github.com/armory-io/go-commons/iam"
+	"github.com/armory-io/go-commons/metrics"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 	"go.uber.org/zap"

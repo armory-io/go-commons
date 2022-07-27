@@ -1,6 +1,6 @@
 package iam
 
-import "github.com/armory-io/lib-go-armory-cloud-commons/iam/token"
+import "github.com/armory-io/go-commons/iam/token"
 
 type Settings struct {
 	JWT            JWT            `yaml:"jwt"`

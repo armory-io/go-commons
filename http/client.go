@@ -2,7 +2,7 @@ package http
 
 import (
 	"context"
-	"github.com/armory-io/lib-go-armory-cloud-commons/iam/token"
+	"github.com/armory-io/go-commons/iam/token"
 	"go.uber.org/zap"
 	"io"
 	"net"
