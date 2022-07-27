@@ -24,9 +24,7 @@ type Settings struct {
 }
 
 func New(settings Settings) (*zap.SugaredLogger, error) {
-	log, err := zap.NewProduction(
-		zap.WithCaller(true),
-	)
+	log, err := zap.NewProductionConfig().Build(zap.WithCaller(true))
 	if err != nil {
 		return nil, err
 	}
