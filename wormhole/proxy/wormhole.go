@@ -44,14 +44,14 @@ var (
 )
 
 func NewWithLogger(baseURL string, overrides *SessionOverrides, tokenSupplier tokenSupplier, log *zap.SugaredLogger) *WormholeService {
-	return new(baseURL, overrides, tokenSupplier, log)
+	return new(baseURL, overrides, tokenSupplier, &logAdapter{SugaredLogger: log})
 }
 
 func New(baseURL string, overrides *SessionOverrides, tokenSupplier tokenSupplier) *WormholeService {
 	return new(baseURL, overrides, tokenSupplier, log.New(os.Stderr, "", log.LstdFlags))
 }
 
-func new(baseURL string, overrides *SessionOverrides, tokenSupplier tokenSupplier, log interface{}) *WormholeService {
+func new(baseURL string, overrides *SessionOverrides, tokenSupplier tokenSupplier, log retryablehttp.Logger) *WormholeService {
 	client := &retryablehttp.Client{
 		HTTPClient:   cleanhttp.DefaultClient(),
 		Logger:       log,
