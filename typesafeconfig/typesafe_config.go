@@ -36,6 +36,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"github.com/armory-io/go-commons/logging"
 	"github.com/armory-io/go-commons/secrets"
 	"github.com/mitchellh/mapstructure"
 	"go.uber.org/multierr"
@@ -53,7 +54,7 @@ import (
 var ErrNoConfigurationSourcesProvided = errors.New("no configuration sources provided, you must provide at least 1 embed.FS or dir path")
 
 type resolver struct {
-	log                 *zap.SugaredLogger
+	log                 logging.Logger
 	embeddedFilesystems []*embed.FS
 	configurationDirs   []string
 	baseNames           []string
