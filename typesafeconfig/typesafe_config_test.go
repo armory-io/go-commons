@@ -244,6 +244,12 @@ func (s *TypesafeConfigTestSuite) TestResolve() {
 				BaseConfigurationNames("basic-config"),
 				Directories("test_resources"),
 			},
+			envVars: []kvPair{
+				{
+					key:   "PROFILES_ACTIVE",
+					value: "prod",
+				},
+			},
 		},
 		{
 			name: "test that resolve produces the expected config when using an embedded fs and a profile",
@@ -308,6 +314,16 @@ func (s *TypesafeConfigTestSuite) TestResolve() {
 			},
 			options: []Option{
 				BaseConfigurationNames("basic-config"),
+				Directories(s.logicalTestResourcePath),
+			},
+		},
+		{
+			name: "test that resolve produces the expected config when using the file system and a secret value",
+			expected: &Config{
+				SomeStringOption: "v:the-value",
+			},
+			options: []Option{
+				BaseConfigurationNames("config-with-secret"),
 				Directories(s.logicalTestResourcePath),
 			},
 		},

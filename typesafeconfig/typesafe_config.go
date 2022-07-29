@@ -90,9 +90,13 @@ func defaultResolver() *resolver {
 	if err == nil {
 		configurationDirs = append(configurationDirs, filepath.Join(usr.HomeDir, ".armory"))
 	}
+
+	profiles := strings.Split(os.Getenv("PROFILES_ACTIVE"), ",")
+
 	return &resolver{
 		baseNames:         []string{"application"},
 		configurationDirs: configurationDirs,
+		profiles:          profiles,
 	}
 }
 
