@@ -29,13 +29,13 @@ func GinAuthMiddleware(ps *ArmoryCloudPrincipalService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		auth, err := extractBearerToken(c.Request)
 		if err != nil {
-			errWriter(c, http.StatusUnauthorized, err.Error())
+			ginErrWriter(c, http.StatusUnauthorized, err.Error())
 			return
 		}
 		// verify principal
 		p, err := ps.ExtractAndVerifyPrincipalFromTokenString(strings.TrimPrefix(auth, fmt.Sprintf("%s ", bearerPrefix)))
 		if err != nil {
-			errWriter(c, http.StatusForbidden, err.Error())
+			ginErrWriter(c, http.StatusForbidden, err.Error())
 			return
 		}
 
@@ -43,7 +43,7 @@ func GinAuthMiddleware(ps *ArmoryCloudPrincipalService) gin.HandlerFunc {
 	}
 }
 
-func errWriter(c *gin.Context, status int, msg string) {
+func ginErrWriter(c *gin.Context, status int, msg string) {
 	c.Header("Content-Type", "application/json")
 	c.Writer.WriteHeader(status)
 	c.JSON(status, armoryhttp.BackstopError{
