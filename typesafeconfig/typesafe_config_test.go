@@ -334,7 +334,7 @@ func (s *TypesafeConfigTestSuite) TestResolve() {
 			for _, enVar := range tc.envVars {
 				os.Setenv(enVar.key, enVar.value)
 			}
-			actual, _ := Resolve[Config](s.log, tc.options...)
+			actual, _ := ResolveConfiguration[Config](s.log, tc.options...)
 			assert.Equal(t, tc.expected, actual)
 			for _, enVar := range tc.envVars {
 				os.Unsetenv(enVar.key)

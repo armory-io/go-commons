@@ -17,15 +17,17 @@
 // Package typesafeconfig is for resolving configurations from many sources into a typesafe object
 //
 // Quickstart:
+//	import . "github.com/armory-io/go-commons/typesafeconfig"
+//
 //	type MyConfiguration struct {
 //		prop1 string
 //		boolProp bool
 //		someList []string
 //	}
 //
-// 	conf := typesafeconfig.Resolve[MyConfiguration](log,
-//		typesafeconfig.BaseConfigurationNames("myappname"), // defaults to application
-//		typesafeconfig.ActiveProfiles("prod"),
+// 	conf := ResolveConfiguration[MyConfiguration](log,
+//		BaseConfigurationNames("myappname"), // defaults to application
+//		ActiveProfiles("prod"),
 //	)
 package typesafeconfig
 
@@ -100,8 +102,8 @@ func defaultResolver() *resolver {
 	}
 }
 
-// Resolve given the provided options resolves your configuration
-func Resolve[T any](log *zap.SugaredLogger, options ...Option) (*T, error) {
+// ResolveConfiguration given the provided options resolves your configuration
+func ResolveConfiguration[T any](log *zap.SugaredLogger, options ...Option) (*T, error) {
 	r := defaultResolver()
 	for _, option := range options {
 		option(r)
