@@ -13,7 +13,7 @@ Common Go libraries that Armory uses to build microservices and tools
 
 ## Versioning Notice
 
-This project will not be following sym ver until 1.0.0, breaking changes can happen without a major version bump.
+This project will not be following sym ver until 2.0.0, breaking changes can happen without a major version bump.
 
 ## Security Reporting
 
