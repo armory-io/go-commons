@@ -30,13 +30,14 @@
 package typesafeconfig
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"fmt"
+	"github.com/armory-io/go-commons/secrets"
 	"github.com/mitchellh/mapstructure"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
-	"golang.org/x/exp/constraints"
 	"golang.org/x/exp/maps"
 	"gopkg.in/yaml.v3"
 	"io/fs"
@@ -113,6 +114,9 @@ func Resolve[T any](log *zap.SugaredLogger, options ...Option) (*T, error) {
 	}
 	sources = append(sources, loadEnvironmentSources())
 	untypedConfig := mergeSources(sources...)
+	if err = resolveSecrets(untypedConfig); err != nil {
+		return nil, err
+	}
 	var typeSafeConfig *T
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		WeaklyTypedInput: true,
@@ -142,10 +146,6 @@ func loadEnvironmentSources() map[string]interface{} {
 		setValue(config, key, value)
 	}
 	return config
-}
-
-type number interface {
-	constraints.Integer | constraints.Float
 }
 
 func setValue(config map[string]interface{}, key []string, value any) {
@@ -206,6 +206,30 @@ func mergeSources(sources ...map[string]interface{}) map[string]interface{} {
 		}
 	}
 	return m
+}
+
+func resolveSecrets(config map[string]interface{}) error {
+	for _, key := range maps.Keys(config) {
+		val := config[key]
+		valT := reflect.TypeOf(val)
+		if valT.Kind() == reflect.Map {
+			if err := resolveSecrets(val.(map[string]interface{})); err != nil {
+				return err
+			}
+		}
+		if valT.Kind() == reflect.String && secrets.IsEncryptedSecret(val.(string)) {
+			d, err := secrets.NewDecrypter(context.TODO(), val.(string))
+			if err != nil {
+				return err
+			}
+			plainTextValue, err := d.Decrypt()
+			if err != nil {
+				return err
+			}
+			config[key] = plainTextValue
+		}
+	}
+	return nil
 }
 
 func normalizeKeys(source map[string]interface{}) map[string]interface{} {
