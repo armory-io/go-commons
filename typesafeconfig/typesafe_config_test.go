@@ -71,14 +71,13 @@ func (s *TypesafeConfigTestSuite) TestSetValue() {
 		key   []string
 		value string
 	}
-	type test struct {
+
+	tests := []struct {
 		name     string
 		kvPairs  []kvPair
-		config   map[string]interface{}
-		expected map[string]interface{}
-	}
-
-	tests := []test{
+		config   map[string]any
+		expected map[string]any
+	}{
 		{
 			name: "test that a nested key can be set into a new map",
 			kvPairs: []kvPair{
@@ -91,10 +90,10 @@ func (s *TypesafeConfigTestSuite) TestSetValue() {
 					value: "wow",
 				},
 			},
-			config: make(map[string]interface{}),
-			expected: map[string]interface{}{
-				"foo": map[string]interface{}{
-					"bar": map[string]interface{}{
+			config: make(map[string]any),
+			expected: map[string]any{
+				"foo": map[string]any{
+					"bar": map[string]any{
 						"bam": "baz",
 						"bop": "wow",
 					},
@@ -113,10 +112,10 @@ func (s *TypesafeConfigTestSuite) TestSetValue() {
 					value: "overridden",
 				},
 			},
-			config: make(map[string]interface{}),
-			expected: map[string]interface{}{
-				"foo": map[string]interface{}{
-					"bar": map[string]interface{}{
+			config: make(map[string]any),
+			expected: map[string]any{
+				"foo": map[string]any{
+					"bar": map[string]any{
 						"bam": "overridden",
 					},
 				},
@@ -134,11 +133,11 @@ func (s *TypesafeConfigTestSuite) TestSetValue() {
 					value: "some-value",
 				},
 			},
-			config: make(map[string]interface{}),
-			expected: map[string]interface{}{
-				"foo": map[string]interface{}{
-					"bar": map[string]interface{}{
-						"bam": map[string]interface{}{
+			config: make(map[string]any),
+			expected: map[string]any{
+				"foo": map[string]any{
+					"bar": map[string]any{
+						"bam": map[string]any{
 							"baz": "some-value",
 						},
 					},
@@ -148,31 +147,33 @@ func (s *TypesafeConfigTestSuite) TestSetValue() {
 	}
 
 	for _, tc := range tests {
-		for _, kvPair := range tc.kvPairs {
-			setValue(tc.config, kvPair.key, kvPair.value)
-		}
-		assert.Equal(s.T(), tc.expected, tc.config, tc.name)
+		s.T().Run(tc.name, func(t *testing.T) {
+			for _, kvPair := range tc.kvPairs {
+				setValue(tc.config, kvPair.key, kvPair.value)
+			}
+			assert.Equal(s.T(), tc.expected, tc.config)
+		})
 	}
 }
 
 func (s *TypesafeConfigTestSuite) TestMergeSources() {
-	m1 := map[string]interface{}{
+	m1 := map[string]any{
 		"some-number": 10,
 		"some-book":   true,
-		"foo": map[string]interface{}{
-			"bar": map[string]interface{}{
+		"foo": map[string]any{
+			"bar": map[string]any{
 				"bam":         "value",
 				"override-me": "original-value",
 			},
 		},
-		"mutate-me": map[string]interface{}{
+		"mutate-me": map[string]any{
 			"wut": true,
 		},
 	}
-	m2 := map[string]interface{}{
-		"foo": map[string]interface{}{
+	m2 := map[string]any{
+		"foo": map[string]any{
 			"some-other-bool": false,
-			"bar": map[string]interface{}{
+			"bar": map[string]any{
 				"bop": "wow",
 				"fiz": []string{
 					"foo",
@@ -184,16 +185,16 @@ func (s *TypesafeConfigTestSuite) TestMergeSources() {
 		"mutate-me": false,
 	}
 
-	m3 := map[string]interface{}{
+	m3 := map[string]any{
 		"some.flattened.nested.key": true,
 	}
 
-	expected := map[string]interface{}{
+	expected := map[string]any{
 		"some-number": 10,
 		"some-book":   true,
-		"foo": map[string]interface{}{
+		"foo": map[string]any{
 			"some-other-bool": false,
-			"bar": map[string]interface{}{
+			"bar": map[string]any{
 				"bam":         "value",
 				"bop":         "wow",
 				"override-me": "new-value",
@@ -204,9 +205,9 @@ func (s *TypesafeConfigTestSuite) TestMergeSources() {
 			},
 		},
 		"mutate-me": false,
-		"some": map[string]interface{}{
-			"flattened": map[string]interface{}{
-				"nested": map[string]interface{}{
+		"some": map[string]any{
+			"flattened": map[string]any{
+				"nested": map[string]any{
 					"key": true,
 				},
 			},
@@ -221,14 +222,13 @@ func (s *TypesafeConfigTestSuite) TestResolve() {
 		key   string
 		value string
 	}
-	type test struct {
+
+	tests := []struct {
 		name     string
 		expected *Config
 		options  []Option
 		envVars  []kvPair
-	}
-
-	tests := []test{
+	}{
 		{
 			name: "test that resolve produces the expected config when using an embedded fs",
 			expected: &Config{
@@ -330,14 +330,16 @@ func (s *TypesafeConfigTestSuite) TestResolve() {
 	}
 
 	for _, tc := range tests {
-		for _, enVar := range tc.envVars {
-			os.Setenv(enVar.key, enVar.value)
-		}
-		actual, _ := Resolve[Config](s.log, tc.options...)
-		assert.Equal(s.T(), tc.expected, actual, tc.name)
-		for _, enVar := range tc.envVars {
-			os.Unsetenv(enVar.key)
-		}
+		s.T().Run(tc.name, func(t *testing.T) {
+			for _, enVar := range tc.envVars {
+				os.Setenv(enVar.key, enVar.value)
+			}
+			actual, _ := Resolve[Config](s.log, tc.options...)
+			assert.Equal(t, tc.expected, actual)
+			for _, enVar := range tc.envVars {
+				os.Unsetenv(enVar.key)
+			}
+		})
 	}
 }
 

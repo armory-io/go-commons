@@ -48,7 +48,7 @@ import (
 	"strings"
 )
 
-var NoConfigurationSourcesProvided = errors.New("no configuration sources provide, you must provided at least 1 embed.FS or dir path")
+var ErrNoConfigurationSourcesProvided = errors.New("no configuration sources provided, you must provide at least 1 embed.FS or dir path")
 
 type resolver struct {
 	log                 *zap.SugaredLogger
@@ -108,7 +108,7 @@ func Resolve[T any](log *zap.SugaredLogger, options ...Option) (*T, error) {
 	}
 
 	if len(r.embeddedFilesystems) == 0 && len(r.configurationDirs) == 0 {
-		return nil, NoConfigurationSourcesProvided
+		return nil, ErrNoConfigurationSourcesProvided
 	}
 
 	candidates := getConfigurationFileCandidates(r.configurationDirs, r.baseNames, r.profiles)
@@ -135,12 +135,11 @@ func Resolve[T any](log *zap.SugaredLogger, options ...Option) (*T, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = decoder.Decode(untypedConfig)
-	return typeSafeConfig, err
+	return typeSafeConfig, decoder.Decode(untypedConfig)
 }
 
-func loadEnvironmentSources() map[string]interface{} {
-	config := make(map[string]interface{})
+func loadEnvironmentSources() map[string]any {
+	config := make(map[string]any)
 	env := os.Environ()
 	for _, envVar := range env {
 		kvPair := strings.SplitN(envVar, "=", 2)
@@ -152,20 +151,20 @@ func loadEnvironmentSources() map[string]interface{} {
 	return config
 }
 
-func setValue(config map[string]interface{}, key []string, value any) {
+func setValue(config map[string]any, key []string, value any) {
 	if len(key) == 1 {
 		config[key[0]] = value
 		return
 	}
 	cur, remaining := pop(key)
-	var nested map[string]interface{}
+	var nested map[string]any
 	if config[cur] == nil {
-		nested = make(map[string]interface{})
+		nested = make(map[string]any)
 	} else {
 		curNested := config[cur]
-		unboxed, ok := curNested.(map[string]interface{})
+		unboxed, ok := curNested.(map[string]any)
 		if !ok {
-			nested = make(map[string]interface{})
+			nested = make(map[string]any)
 		} else {
 			nested = unboxed
 		}
@@ -180,12 +179,12 @@ func pop[T any](array []T) (T, []T) {
 
 // mergeSources recursively left merges config sources, omitting any non-map values that are not one of: lists, numbers, or booleans
 // un-flattens keys before merging into new map
-func mergeSources(sources ...map[string]interface{}) map[string]interface{} {
-	m := make(map[string]interface{})
+func mergeSources(sources ...map[string]any) map[string]any {
+	m := make(map[string]any)
 	for _, unNormalizedSource := range sources {
 		source := normalizeKeys(unNormalizedSource)
 		// iterate through key and if the value is a map recurse, else set the key to the value if type is a number, list or boolean
-		for _, key := range maps.Keys(source) {
+		for key := range source {
 			val := source[key]
 			cur := m[key]
 			if cur == nil {
@@ -197,9 +196,9 @@ func mergeSources(sources ...map[string]interface{}) map[string]interface{} {
 			valT := reflect.TypeOf(val)
 			switch curT.Kind() {
 			case reflect.Map:
-				typedCur := cur.(map[string]interface{})
+				typedCur := cur.(map[string]any)
 				if valT.Kind() == reflect.Map {
-					typedVal := val.(map[string]interface{})
+					typedVal := val.(map[string]any)
 					m[key] = mergeSources(typedCur, typedVal)
 				} else {
 					m[key] = val
@@ -212,17 +211,17 @@ func mergeSources(sources ...map[string]interface{}) map[string]interface{} {
 	return m
 }
 
-func resolveSecrets(config map[string]interface{}) error {
+func resolveSecrets(config map[string]any) error {
 	for _, key := range maps.Keys(config) {
 		val := config[key]
 		valT := reflect.TypeOf(val)
 		if valT.Kind() == reflect.Map {
-			if err := resolveSecrets(val.(map[string]interface{})); err != nil {
+			if err := resolveSecrets(val.(map[string]any)); err != nil {
 				return err
 			}
 		}
 		if valT.Kind() == reflect.String && secrets.IsEncryptedSecret(val.(string)) {
-			d, err := secrets.NewDecrypter(context.TODO(), val.(string))
+			d, err := secrets.NewDecrypter(context.Background(), val.(string))
 			if err != nil {
 				return err
 			}
@@ -236,8 +235,8 @@ func resolveSecrets(config map[string]interface{}) error {
 	return nil
 }
 
-func normalizeKeys(source map[string]interface{}) map[string]interface{} {
-	m := make(map[string]interface{})
+func normalizeKeys(source map[string]any) map[string]any {
+	m := make(map[string]any)
 	// un-flatten keys, ['foo.bar.bam']=true -> ['foo']['bar']['bam']=true
 	for _, key := range maps.Keys(source) {
 		normalizedKey := strings.ToLower(key)
@@ -256,8 +255,8 @@ func loadFileBasedConfigurationSources(
 	log *zap.SugaredLogger,
 	candidates []string,
 	embeddedFilesystems []*embed.FS,
-) ([]map[string]interface{}, error) {
-	var sources []map[string]interface{}
+) ([]map[string]any, error) {
+	var sources []map[string]any
 	for _, candidate := range candidates {
 		candidateFound := false
 		// Scan through the list of embedded filesystems, stopping at the first found
@@ -291,7 +290,7 @@ func loadFileBasedConfigurationSources(
 	return sources, nil
 }
 
-func loadCandidateFromEmbeddedFs(filesystem fs.FS, candidate string) (map[string]interface{}, error) {
+func loadCandidateFromEmbeddedFs(filesystem fs.FS, candidate string) (map[string]any, error) {
 	data, err := fs.ReadFile(filesystem, candidate)
 	if err != nil {
 		return nil, nil
@@ -299,18 +298,18 @@ func loadCandidateFromEmbeddedFs(filesystem fs.FS, candidate string) (map[string
 	return unmarshalData(data, candidate)
 }
 
-func unmarshalData(data []byte, candidate string) (map[string]interface{}, error) {
-	var config map[string]interface{}
+func unmarshalData(data []byte, candidate string) (map[string]any, error) {
+	var config map[string]any
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, multierr.Append(
-			fmt.Errorf("failed to unmarshel configuration: %s", candidate),
+			fmt.Errorf("failed to unmarshal configuration: %s", candidate),
 			err,
 		)
 	}
 	return config, nil
 }
 
-func loadCandidate(candidate string) (map[string]interface{}, error) {
+func loadCandidate(candidate string) (map[string]any, error) {
 	data, err := os.ReadFile(candidate)
 	if err != nil {
 		return nil, nil
