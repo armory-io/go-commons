@@ -1,0 +1,5 @@
+featureEnabled: true
+numberOfWidgets: 10
+someStringOption: this is a string
+embeddedSubConfig:
+  someOtherStringOption: this is another string
