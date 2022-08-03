@@ -36,7 +36,6 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"github.com/armory-io/go-commons/logging"
 	"github.com/armory-io/go-commons/secrets"
 	"github.com/mitchellh/mapstructure"
 	"go.uber.org/multierr"
@@ -54,7 +53,7 @@ import (
 var ErrNoConfigurationSourcesProvided = errors.New("no configuration sources provided, you must provide at least 1 embed.FS or dir path")
 
 type resolver struct {
-	log                 logging.Logger
+	log                 *zap.SugaredLogger
 	embeddedFilesystems []*embed.FS
 	configurationDirs   []string
 	baseNames           []string
@@ -75,6 +74,12 @@ func Directories(directories ...string) Option {
 	}
 }
 
+func AdditionalDirectories(directories ...string) Option {
+	return func(resolver *resolver) {
+		resolver.configurationDirs = append(resolver.configurationDirs, directories...)
+	}
+}
+
 func ActiveProfiles(profiles ...string) Option {
 	return func(resolver *resolver) {
 		resolver.profiles = profiles
@@ -88,7 +93,7 @@ func BaseConfigurationNames(baseNames ...string) Option {
 }
 
 func defaultResolver() *resolver {
-	configurationDirs := []string{"/opt/go-application/config"}
+	configurationDirs := []string{"/opt/go-application/config", "resources"}
 	usr, err := user.Current()
 	if err == nil {
 		configurationDirs = append(configurationDirs, filepath.Join(usr.HomeDir, ".armory"))

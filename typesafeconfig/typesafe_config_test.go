@@ -156,6 +156,15 @@ func (s *TypesafeConfigTestSuite) TestSetValue() {
 	}
 }
 
+func (s *TypesafeConfigTestSuite) TestAdditionDirs() {
+	r := &resolver{
+		log:               s.log,
+		configurationDirs: []string{"foo"},
+	}
+	AdditionalDirectories("bar")(r)
+	assert.Equal(s.T(), []string{"foo", "bar"}, r.configurationDirs)
+}
+
 func (s *TypesafeConfigTestSuite) TestMergeSources() {
 	m1 := map[string]any{
 		"some-number": 10,
