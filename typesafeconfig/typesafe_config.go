@@ -96,14 +96,12 @@ func WithBaseConfigurationNames(baseNames ...string) Option {
 func WithExplicitProperties[T string | map[string]any](properties ...T) Option {
 	return func(resolver *resolver) {
 		for _, propertySource := range properties {
-			pType := reflect.TypeOf(propertySource)
-			switch pType.Kind() {
-			case reflect.Map:
-				typedP := any(propertySource).(map[string]any)
-				resolver.explicitProperties = mergeSources(resolver.explicitProperties, typedP)
-			case reflect.String:
-				typedP := any(propertySource).(string)
-				kvPair := strings.SplitN(typedP, "=", 2)
+			pAny := any(propertySource)
+			switch pAny.(type) {
+			case map[string]any:
+				resolver.explicitProperties = mergeSources(resolver.explicitProperties, pAny.(map[string]any))
+			case string:
+				kvPair := strings.SplitN(pAny.(string), "=", 2)
 				rawKey := kvPair[0]
 				value := kvPair[1]
 				key := strings.Split(rawKey, ".")
