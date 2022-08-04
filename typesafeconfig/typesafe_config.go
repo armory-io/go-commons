@@ -93,14 +93,22 @@ func WithBaseConfigurationNames(baseNames ...string) Option {
 	}
 }
 
-func WithExplicitProperties(properties ...string) Option {
+func WithExplicitProperties[T string | map[string]any](properties ...T) Option {
 	return func(resolver *resolver) {
-		for _, property := range properties {
-			kvPair := strings.SplitN(property, "=", 2)
-			rawKey := kvPair[0]
-			value := kvPair[1]
-			key := strings.Split(rawKey, ".")
-			setValue(resolver.explicitProperties, key, value)
+		for _, propertySource := range properties {
+			pType := reflect.TypeOf(propertySource)
+			switch pType.Kind() {
+			case reflect.Map:
+				typedP := any(propertySource).(map[string]any)
+				resolver.explicitProperties = mergeSources(resolver.explicitProperties, typedP)
+			case reflect.String:
+				typedP := any(propertySource).(string)
+				kvPair := strings.SplitN(typedP, "=", 2)
+				rawKey := kvPair[0]
+				value := kvPair[1]
+				key := strings.Split(rawKey, ".")
+				setValue(resolver.explicitProperties, key, value)
+			}
 		}
 	}
 }
