@@ -18,6 +18,7 @@ package secrets
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -190,8 +191,17 @@ func TestDecrypt(t *testing.T) {
 			expectedSecret: "",
 		},
 		{
+			name:           "The provided params is for a kv map and a specific key, but the key is not in the map",
+			secretKey:      "not-in-the-map",
+			payload:        "custom.json",
+			expectedError:  fmt.Sprintf(ErrKeyNotFound, "not-in-the-map", "some-secret", []string{"some-secret-key"}),
+			isFile:         false,
+			expectedFile:   "",
+			expectedSecret: "",
+		},
+		{
 			name:           "The provided params is for a kv map and a specific key, but the configured secrets value is an embedded object and not a string",
-			secretKey:      "some-secret",
+			secretKey:      "some-secret-key",
 			payload:        "custom.json",
 			expectedError:  MalformedKVPairSecretPayload,
 			isFile:         false,
