@@ -26,8 +26,8 @@
 //	}
 //
 // 	conf := ResolveConfiguration[MyConfiguration](log,
-//		BaseConfigurationNames("myappname"), // defaults to application
-//		ActiveProfiles("prod"),
+//		WithBaseConfigurationNames("myappname"), // defaults to application
+//		WithActiveProfiles("prod"),
 //	)
 package typesafeconfig
 
@@ -58,37 +58,50 @@ type resolver struct {
 	configurationDirs   []string
 	baseNames           []string
 	profiles            []string
+	explicitProperties  map[string]any
 }
 
 type Option = func(resolver *resolver)
 
-func EmbeddedFilesystems(embeddedFilesystems ...*embed.FS) Option {
+func WithEmbeddedFilesystems(embeddedFilesystems ...*embed.FS) Option {
 	return func(resolver *resolver) {
 		resolver.embeddedFilesystems = embeddedFilesystems
 	}
 }
 
-func Directories(directories ...string) Option {
+func WithDirectories(directories ...string) Option {
 	return func(resolver *resolver) {
 		resolver.configurationDirs = directories
 	}
 }
 
-func AdditionalDirectories(directories ...string) Option {
+func WithAdditionalDirectories(directories ...string) Option {
 	return func(resolver *resolver) {
 		resolver.configurationDirs = append(resolver.configurationDirs, directories...)
 	}
 }
 
-func ActiveProfiles(profiles ...string) Option {
+func WithActiveProfiles(profiles ...string) Option {
 	return func(resolver *resolver) {
 		resolver.profiles = profiles
 	}
 }
 
-func BaseConfigurationNames(baseNames ...string) Option {
+func WithBaseConfigurationNames(baseNames ...string) Option {
 	return func(resolver *resolver) {
 		resolver.baseNames = baseNames
+	}
+}
+
+func WithExplicitProperties(properties ...string) Option {
+	return func(resolver *resolver) {
+		for _, property := range properties {
+			kvPair := strings.SplitN(property, "=", 2)
+			rawKey := kvPair[0]
+			value := kvPair[1]
+			key := strings.Split(rawKey, ".")
+			setValue(resolver.explicitProperties, key, value)
+		}
 	}
 }
 
@@ -102,9 +115,10 @@ func defaultResolver() *resolver {
 	profiles := strings.Split(os.Getenv("PROFILES_ACTIVE"), ",")
 
 	return &resolver{
-		baseNames:         []string{"application"},
-		configurationDirs: configurationDirs,
-		profiles:          profiles,
+		baseNames:          []string{"application"},
+		configurationDirs:  configurationDirs,
+		profiles:           profiles,
+		explicitProperties: make(map[string]any),
 	}
 }
 
@@ -124,7 +138,10 @@ func ResolveConfiguration[T any](log *zap.SugaredLogger, options ...Option) (*T,
 	if err != nil {
 		return nil, err
 	}
-	sources = append(sources, loadEnvironmentSources())
+	sources = append(sources,
+		loadEnvironmentSources(),
+		r.explicitProperties, // explicit properties should be the last source
+	)
 	untypedConfig := mergeSources(sources...)
 	if err = resolveSecrets(untypedConfig); err != nil {
 		return nil, err

@@ -161,7 +161,7 @@ func (s *TypesafeConfigTestSuite) TestAdditionDirs() {
 		log:               s.log,
 		configurationDirs: []string{"foo"},
 	}
-	AdditionalDirectories("bar")(r)
+	WithAdditionalDirectories("bar")(r)
 	assert.Equal(s.T(), []string{"foo", "bar"}, r.configurationDirs)
 }
 
@@ -249,9 +249,9 @@ func (s *TypesafeConfigTestSuite) TestResolve() {
 				},
 			},
 			options: []Option{
-				EmbeddedFilesystems(&testResources),
-				BaseConfigurationNames("basic-config"),
-				Directories("test_resources"),
+				WithEmbeddedFilesystems(&testResources),
+				WithBaseConfigurationNames("basic-config"),
+				WithDirectories("test_resources"),
 			},
 			envVars: []kvPair{
 				{
@@ -271,10 +271,10 @@ func (s *TypesafeConfigTestSuite) TestResolve() {
 				},
 			},
 			options: []Option{
-				EmbeddedFilesystems(&testResources),
-				BaseConfigurationNames("basic-config"),
-				Directories("test_resources"),
-				ActiveProfiles("profile1"),
+				WithEmbeddedFilesystems(&testResources),
+				WithBaseConfigurationNames("basic-config"),
+				WithDirectories("test_resources"),
+				WithActiveProfiles("profile1"),
 			},
 		},
 		{
@@ -288,10 +288,10 @@ func (s *TypesafeConfigTestSuite) TestResolve() {
 				},
 			},
 			options: []Option{
-				EmbeddedFilesystems(&testResources),
-				BaseConfigurationNames("basic-config"),
-				Directories("test_resources"),
-				ActiveProfiles("profile1"),
+				WithEmbeddedFilesystems(&testResources),
+				WithBaseConfigurationNames("basic-config"),
+				WithDirectories("test_resources"),
+				WithActiveProfiles("profile1"),
 			},
 			envVars: []kvPair{
 				{
@@ -306,9 +306,9 @@ func (s *TypesafeConfigTestSuite) TestResolve() {
 				FeatureEnabled: true,
 			},
 			options: []Option{
-				EmbeddedFilesystems(&testResources),
-				BaseConfigurationNames("snake-case"),
-				Directories("test_resources"),
+				WithEmbeddedFilesystems(&testResources),
+				WithBaseConfigurationNames("snake-case"),
+				WithDirectories("test_resources"),
 			},
 		},
 		{
@@ -322,8 +322,8 @@ func (s *TypesafeConfigTestSuite) TestResolve() {
 				},
 			},
 			options: []Option{
-				BaseConfigurationNames("basic-config"),
-				Directories(s.logicalTestResourcePath),
+				WithBaseConfigurationNames("basic-config"),
+				WithDirectories(s.logicalTestResourcePath),
 			},
 		},
 		{
@@ -332,8 +332,34 @@ func (s *TypesafeConfigTestSuite) TestResolve() {
 				SomeStringOption: "v:the-value",
 			},
 			options: []Option{
-				BaseConfigurationNames("config-with-secret"),
-				Directories(s.logicalTestResourcePath),
+				WithBaseConfigurationNames("config-with-secret"),
+				WithDirectories(s.logicalTestResourcePath),
+			},
+		},
+		{
+			name: "test that resolve produces the expected config when an explicit property",
+			expected: &Config{
+				FeatureEnabled:   true,
+				NumberOfWidgets:  10,
+				SomeStringOption: "this is a string",
+				EmbeddedSubConfig: EmbeddedSubConfig{
+					SomeOtherStringOption: "there can only be one",
+				},
+			},
+			options: []Option{
+				WithEmbeddedFilesystems(&testResources),
+				WithBaseConfigurationNames("basic-config"),
+				WithDirectories("test_resources"),
+				WithActiveProfiles("profile1"),
+				WithExplicitProperties(
+					"embeddedSubConfig.someOtherStringOption=there can only be one",
+				),
+			},
+			envVars: []kvPair{
+				{
+					key:   "EMBEDDEDSUBCONFIG_SOMEOTHERSTRINGOPTION",
+					value: "this is a new string from the env var",
+				},
 			},
 		},
 	}
