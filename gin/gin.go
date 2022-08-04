@@ -55,7 +55,7 @@ func NewGinServer(
 		OnStart: func(ctx context.Context) error {
 			go func() {
 				if err := server.Start(g); err != nil {
-					logger.Errorf("Failed to start server: %s", err)
+					logger.Fatalf("Failed to start server: %s", err)
 				}
 			}()
 			return nil

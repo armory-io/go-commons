@@ -26,4 +26,24 @@ type (
 		Message string `json:"message"`
 		Code    int    `json:"code"`
 	}
+
+	StatusError struct {
+		msg  string
+		code int
+	}
 )
+
+func NewStatusError(msg string, httpCode int) *StatusError {
+	return &StatusError{
+		msg:  msg,
+		code: httpCode,
+	}
+}
+
+func (se *StatusError) Error() string {
+	return se.msg
+}
+
+func (se *StatusError) StatusCode() int {
+	return se.code
+}
