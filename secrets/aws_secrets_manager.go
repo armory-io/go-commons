@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
+	"golang.org/x/exp/maps"
 	"strings"
 )
 
@@ -33,6 +34,7 @@ const (
 	RegionMissingError                     = "secret format error - 'r' for region is required"
 	SecretNameMissingError                 = "secret format error - 's' for secret name is required"
 	MalformedKVPairSecretPayload           = "malformed kv pair secret payload, expected the payload to be a params value pair map of type: map[string]string"
+	ErrKeyNotFound                         = "the key '%s', was not found in the secret payload for secret: %s, available keys: '%v'"
 )
 
 type AwsSecretsManagerDecrypter struct {
@@ -70,7 +72,7 @@ func (a *AwsSecretsManagerDecrypter) Decrypt() (string, error) {
 		return parsePlaintextFile(secretValue)
 
 	} else if a.secretKey != "" { // The secret is assumed to be a k,v pair return the v
-		return parseSecretKVPair(secretValue, a.secretKey)
+		return parseSecretKVPair(secretValue, a.secretKey, a.secretName)
 	}
 
 	// The secret is assumed to be a plaintext value return the value
@@ -139,7 +141,7 @@ func parseSecretValue(secretValue *secretsmanager.GetSecretValueOutput) (string,
 	return *secretValue.SecretString, nil
 }
 
-func parseSecretKVPair(secretValue *secretsmanager.GetSecretValueOutput, key string) (string, error) {
+func parseSecretKVPair(secretValue *secretsmanager.GetSecretValueOutput, key string, secretName string) (string, error) {
 	if secretValue.SecretString == nil {
 		return "", fmt.Errorf(MalformedKVPairSecretPayload)
 	}
@@ -152,6 +154,9 @@ func parseSecretKVPair(secretValue *secretsmanager.GetSecretValueOutput, key str
 	}
 
 	untypedValue := kvPairs[key]
+	if untypedValue == nil {
+		return "", fmt.Errorf(ErrKeyNotFound, key, secretName, maps.Keys(kvPairs))
+	}
 	valueForKeyAsString, ok := untypedValue.(string)
 	if !ok {
 		return "", fmt.Errorf(MalformedKVPairSecretPayload)
