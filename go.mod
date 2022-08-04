@@ -12,13 +12,11 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.7.1
 	github.com/hashicorp/vault/api v1.7.2
 	github.com/hashicorp/vault/sdk v0.5.3
-	github.com/imdario/mergo v0.3.12
 	github.com/lestrrat-go/jwx v1.2.25
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/otiai10/copy v1.7.0
 	github.com/prometheus/client_golang v1.12.2
 	github.com/sirupsen/logrus v1.9.0
-	github.com/spf13/afero v1.6.0
 	github.com/stretchr/testify v1.8.0
 	github.com/uber-go/tally/v4 v4.1.2
 	go.uber.org/fx v1.17.1

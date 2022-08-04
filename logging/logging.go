@@ -17,16 +17,60 @@
 package logging
 
 import (
+	"github.com/armory-io/go-commons/metadata"
+	"go.uber.org/fx"
 	"go.uber.org/zap"
+	"strings"
 )
 
-type Settings struct {
+const (
+	applicationName = "app"
+	version         = "version"
+	environment     = "environment"
+	replicaSet      = "replicaset"
+	hostname        = "hostname"
+)
+
+func ArmoryLoggerProvider(appMd metadata.ApplicationMetadata) (*zap.SugaredLogger, error) {
+	var logger *zap.Logger
+
+	var baseLogFields []zap.Field
+	baseLogFields = appendFieldIfPresent(applicationName, appMd.Name, baseLogFields)
+	baseLogFields = appendFieldIfPresent(environment, appMd.Environment, baseLogFields)
+	baseLogFields = appendFieldIfPresent(replicaSet, appMd.Replicaset, baseLogFields)
+	baseLogFields = appendFieldIfPresent(hostname, appMd.Hostname, baseLogFields)
+	baseLogFields = appendFieldIfPresent(version, appMd.Version, baseLogFields)
+
+	loggerOptions := []zap.Option{
+		zap.WithCaller(true),
+		zap.Fields(baseLogFields...),
+	}
+
+	switch strings.ToLower(appMd.Environment) {
+	case "production", "prod", "staging", "stage":
+		l, err := zap.NewProductionConfig().Build(loggerOptions...)
+		if err != nil {
+			return nil, err
+		}
+		logger = l
+	default:
+		l, err := zap.NewDevelopment(loggerOptions...)
+		if err != nil {
+			return nil, err
+		}
+		logger = l
+	}
+
+	return logger.Sugar(), nil
 }
 
-func New(settings Settings) (*zap.SugaredLogger, error) {
-	log, err := zap.NewProductionConfig().Build(zap.WithCaller(true))
-	if err != nil {
-		return nil, err
+func appendFieldIfPresent(key string, value string, fields []zap.Field) []zap.Field {
+	if value != "" {
+		return append(fields, zap.String(key, value))
 	}
-	return log.Sugar(), nil
+	return fields
 }
+
+var Module = fx.Options(
+	fx.Provide(ArmoryLoggerProvider),
+)
