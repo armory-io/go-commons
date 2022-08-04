@@ -37,6 +37,7 @@ type Config struct {
 	NumberOfWidgets   int
 	SomeStringOption  string
 	SomeUnsetValue    string
+	List              []string
 	EmbeddedSubConfig EmbeddedSubConfig
 }
 
@@ -353,6 +354,41 @@ func (s *TypesafeConfigTestSuite) TestResolve() {
 				WithActiveProfiles("profile1"),
 				WithExplicitProperties(
 					"embeddedSubConfig.someOtherStringOption=there can only be one",
+				),
+			},
+			envVars: []kvPair{
+				{
+					key:   "EMBEDDEDSUBCONFIG_SOMEOTHERSTRINGOPTION",
+					value: "this is a new string from the env var",
+				},
+			},
+		},
+		{
+			name: "test that resolve produces the expected config when an explicit property map",
+			expected: &Config{
+				FeatureEnabled:   true,
+				NumberOfWidgets:  10,
+				SomeStringOption: "this is a string",
+				EmbeddedSubConfig: EmbeddedSubConfig{
+					SomeOtherStringOption: "this is a new string from the env var",
+				},
+				List: []string{
+					"item1",
+					"item2",
+				},
+			},
+			options: []Option{
+				WithEmbeddedFilesystems(&testResources),
+				WithBaseConfigurationNames("basic-config"),
+				WithDirectories("test_resources"),
+				WithActiveProfiles("profile1"),
+				WithExplicitProperties(
+					map[string]any{
+						"list": []string{
+							"item1",
+							"item2",
+						},
+					},
 				),
 			},
 			envVars: []kvPair{
