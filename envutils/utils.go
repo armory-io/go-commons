@@ -25,8 +25,8 @@ func GetEnvVarOrDefault(key, defaultValue string) string {
 	return v
 }
 
-// GetArmoryApplicationName returns the value of the ARMORY_APPLICATION_NAME env var else it defaults to empty string
-func GetArmoryApplicationName() string {
+// GetApplicationName returns the value of the ARMORY_APPLICATION_NAME env var else it defaults to empty string
+func GetApplicationName() string {
 	name := os.Getenv(applicationName)
 	if name == "" {
 		name = os.Getenv(armoryApplicationName)
@@ -34,8 +34,8 @@ func GetArmoryApplicationName() string {
 	return strings.ToLower(name)
 }
 
-// GetArmoryEnvironmentName returns the value of the ARMORY_ENVIRONMENT_NAME env var if present else it defaults to local
-func GetArmoryEnvironmentName() string {
+// GetEnvironmentName returns the value of the ARMORY_ENVIRONMENT_NAME env var if present else it defaults to local
+func GetEnvironmentName() string {
 	envName := os.Getenv(applicationEnv)
 	if envName == "" {
 		envName = os.Getenv(armoryEnvironmentName)
@@ -46,13 +46,13 @@ func GetArmoryEnvironmentName() string {
 	return strings.ToLower(envName)
 }
 
-// GetArmoryReplicaSetName returns the value of the ARMORY_REPLICA_SET_NAME env var if present else an empty string
-func GetArmoryReplicaSetName() string {
+// GetReplicaSetName returns the value of the ARMORY_REPLICA_SET_NAME env var if present else an empty string
+func GetReplicaSetName() string {
 	return os.Getenv(armoryReplicaSetName)
 }
 
-// GetArmoryApplicationVersion returns the value of ARMORY_APPLICATION_VERSION or else defaults to "unset"
-func GetArmoryApplicationVersion() string {
+// GetApplicationVersion returns the value of ARMORY_APPLICATION_VERSION or else defaults to "unset"
+func GetApplicationVersion() string {
 	version := os.Getenv(applicationVersion)
 	if version == "" {
 		version = os.Getenv(armoryApplicationVersion)

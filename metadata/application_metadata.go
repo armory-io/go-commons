@@ -20,10 +20,10 @@ func ApplicationMetadataProvider() ApplicationMetadata {
 		hostname = "unknown"
 	}
 	return ApplicationMetadata{
-		Name:        envutils.GetArmoryApplicationName(),
-		Version:     envutils.GetArmoryApplicationVersion(),
-		Environment: envutils.GetArmoryEnvironmentName(),
-		Replicaset:  envutils.GetArmoryReplicaSetName(),
+		Name:        envutils.GetApplicationName(),
+		Version:     envutils.GetApplicationVersion(),
+		Environment: envutils.GetEnvironmentName(),
+		Replicaset:  envutils.GetReplicaSetName(),
 		Hostname:    hostname,
 	}
 }
