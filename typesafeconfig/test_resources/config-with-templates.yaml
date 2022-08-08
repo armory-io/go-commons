@@ -1,0 +1,5 @@
+featureEnabled: false
+numberOfWidgets: 5
+someStringOption: '{{ env.SOME_ENV_VAR }}'
+embeddedSubConfig:
+  someOtherStringOption: this is another string

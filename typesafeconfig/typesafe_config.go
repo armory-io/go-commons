@@ -37,6 +37,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/armory-io/go-commons/secrets"
+	"github.com/cbroglie/mustache"
 	"github.com/mitchellh/mapstructure"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
@@ -149,7 +150,12 @@ func ResolveConfiguration[T any](log *zap.SugaredLogger, options ...Option) (*T,
 		r.explicitProperties, // explicit properties should be the last source
 	)
 	untypedConfig := mergeSources(sources...)
+	// hydrate secret tokens
 	if err = resolveSecrets(untypedConfig); err != nil {
+		return nil, err
+	}
+	// hydrate template tokens
+	if err = resolveTemplates(untypedConfig); err != nil {
 		return nil, err
 	}
 	var typeSafeConfig *T
@@ -242,25 +248,66 @@ func mergeSources(sources ...map[string]any) map[string]any {
 	return m
 }
 
+// resolveTemplates resolves values that are mustache templates, but currently only sets the context to { "env": { [key: string]: string } }
+func resolveTemplates(config map[string]any) error {
+	envVars := make(map[string]string)
+	env := os.Environ()
+	for _, envVar := range env {
+		kvPair := strings.SplitN(envVar, "=", 2)
+		key := kvPair[0]
+		value := kvPair[1]
+		envVars[key] = value
+	}
+
+	templateContext := map[string]any{
+		"env": envVars,
+	}
+
+	return recurseStringValuesAndMap(config, func(value string) (string, error) {
+		parsedTemplate, err := mustache.ParseString(value)
+		if err != nil {
+			return value, err
+		}
+		renderedValue, err := parsedTemplate.Render(templateContext)
+		if err != nil {
+			return value, err
+		}
+		return renderedValue, nil
+	})
+}
+
 func resolveSecrets(config map[string]any) error {
+	return recurseStringValuesAndMap(config, func(value string) (string, error) {
+		if secrets.IsEncryptedSecret(value) {
+			d, err := secrets.NewDecrypter(context.Background(), value)
+			if err != nil {
+				return value, err
+			}
+			plainTextValue, err := d.Decrypt()
+			if err != nil {
+				return value, err
+			}
+			return plainTextValue, nil
+		}
+		return value, nil
+	})
+}
+
+func recurseStringValuesAndMap(config map[string]any, valueMapper func(value string) (string, error)) error {
 	for _, key := range maps.Keys(config) {
 		val := config[key]
 		valT := reflect.TypeOf(val)
 		if valT.Kind() == reflect.Map {
-			if err := resolveSecrets(val.(map[string]any)); err != nil {
+			if err := recurseStringValuesAndMap(val.(map[string]any), valueMapper); err != nil {
 				return err
 			}
 		}
-		if valT.Kind() == reflect.String && secrets.IsEncryptedSecret(val.(string)) {
-			d, err := secrets.NewDecrypter(context.Background(), val.(string))
+		if valT.Kind() == reflect.String {
+			value, err := valueMapper(val.(string))
 			if err != nil {
 				return err
 			}
-			plainTextValue, err := d.Decrypt()
-			if err != nil {
-				return err
-			}
-			config[key] = plainTextValue
+			config[key] = value
 		}
 	}
 	return nil

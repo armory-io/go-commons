@@ -398,6 +398,28 @@ func (s *TypesafeConfigTestSuite) TestResolve() {
 				},
 			},
 		},
+		{
+			name: "test that resolve produces the expected config with an env var reference",
+			expected: &Config{
+				FeatureEnabled:   false,
+				NumberOfWidgets:  5,
+				SomeStringOption: "some-env-var-value",
+				EmbeddedSubConfig: EmbeddedSubConfig{
+					SomeOtherStringOption: "this is another string",
+				},
+			},
+			options: []Option{
+				WithEmbeddedFilesystems(&testResources),
+				WithBaseConfigurationNames("config-with-templates"),
+				WithDirectories("test_resources"),
+			},
+			envVars: []kvPair{
+				{
+					key:   "SOME_ENV_VAR",
+					value: "some-env-var-value",
+				},
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -405,7 +427,10 @@ func (s *TypesafeConfigTestSuite) TestResolve() {
 			for _, enVar := range tc.envVars {
 				os.Setenv(enVar.key, enVar.value)
 			}
-			actual, _ := ResolveConfiguration[Config](s.log, tc.options...)
+			actual, err := ResolveConfiguration[Config](s.log, tc.options...)
+			if err != nil {
+				t.Fatalf(err.Error())
+			}
 			assert.Equal(t, tc.expected, actual)
 			for _, enVar := range tc.envVars {
 				os.Unsetenv(enVar.key)
