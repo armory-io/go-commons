@@ -1,12 +1,18 @@
 package envutils
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 const (
 	armoryApplicationName    = "ARMORY_APPLICATION_NAME"
 	armoryEnvironmentName    = "ARMORY_ENVIRONMENT_NAME"
 	armoryReplicaSetName     = "ARMORY_REPLICA_SET_NAME"
 	armoryApplicationVersion = "ARMORY_APPLICATION_VERSION"
+	applicationName          = "APPLICATION_NAME"
+	applicationEnv           = "APPLICATION_ENVIRONMENT"
+	applicationVersion       = "APPLICATION_VERSION"
 	local                    = "local"
 )
 
@@ -21,12 +27,23 @@ func GetEnvVarOrDefault(key, defaultValue string) string {
 
 // GetArmoryApplicationName returns the value of the ARMORY_APPLICATION_NAME env var else it defaults to empty string
 func GetArmoryApplicationName() string {
-	return os.Getenv(armoryApplicationName)
+	name := os.Getenv(applicationName)
+	if name == "" {
+		name = os.Getenv(armoryApplicationName)
+	}
+	return strings.ToLower(name)
 }
 
 // GetArmoryEnvironmentName returns the value of the ARMORY_ENVIRONMENT_NAME env var if present else it defaults to local
 func GetArmoryEnvironmentName() string {
-	return GetEnvVarOrDefault(armoryEnvironmentName, local)
+	envName := os.Getenv(applicationEnv)
+	if envName == "" {
+		envName = os.Getenv(armoryEnvironmentName)
+	}
+	if envName == "" {
+		envName = local
+	}
+	return strings.ToLower(envName)
 }
 
 // GetArmoryReplicaSetName returns the value of the ARMORY_REPLICA_SET_NAME env var if present else an empty string
@@ -36,5 +53,12 @@ func GetArmoryReplicaSetName() string {
 
 // GetArmoryApplicationVersion returns the value of ARMORY_APPLICATION_VERSION or else defaults to "unset"
 func GetArmoryApplicationVersion() string {
-	return GetEnvVarOrDefault(armoryApplicationVersion, "unset")
+	version := os.Getenv(applicationVersion)
+	if version == "" {
+		version = os.Getenv(armoryApplicationVersion)
+	}
+	if version == "" {
+		version = "unset"
+	}
+	return version
 }
