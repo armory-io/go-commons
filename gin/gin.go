@@ -29,7 +29,7 @@ import (
 
 func NewGinServer(
 	lifecycle fx.Lifecycle,
-	config armoryhttp.ServerSettings,
+	config armoryhttp.Configuration,
 	logger *zap.SugaredLogger,
 	ps *iam.ArmoryCloudPrincipalService,
 	ms *metrics.Metrics,

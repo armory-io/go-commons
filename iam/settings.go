@@ -18,7 +18,7 @@ package iam
 
 import "github.com/armory-io/go-commons/iam/token"
 
-type Settings struct {
+type Configuration struct {
 	JWT            JWT            `yaml:"jwt"`
 	RequiredScopes []string       `yaml:"requiredScopes"`
 	Identity       token.Identity `yaml:"identity"`

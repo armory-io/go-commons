@@ -34,7 +34,7 @@ const (
 )
 
 type (
-	ServerSettings struct {
+	Configuration struct {
 		HTTP HTTP `yaml:"http"`
 	}
 
@@ -63,16 +63,16 @@ type (
 	ClientAuthType string
 
 	Server struct {
-		config ServerSettings
+		config Configuration
 		server *http.Server
 	}
 )
 
-func (s ServerSettings) GetAddr() string {
+func (s Configuration) GetAddr() string {
 	return fmt.Sprintf("%s:%d", s.HTTP.Host, s.HTTP.Port)
 }
 
-func NewServer(config ServerSettings) *Server {
+func NewServer(config Configuration) *Server {
 	return &Server{
 		config: config,
 	}

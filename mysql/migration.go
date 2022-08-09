@@ -33,11 +33,11 @@ const defaultMigrationPath = "./db/migrations"
 
 type (
 	Migrator struct {
-		settings Settings
+		settings Configuration
 		log      *zap.SugaredLogger
 	}
 
-	Settings struct {
+	Configuration struct {
 		Connection string `yaml:"connection"`
 		// User can also be specified separately from the connection string
 		User string `yaml:"user"`
@@ -64,7 +64,7 @@ type (
 	}
 )
 
-func (d *Settings) ConnectionUrl(migration bool) (string, error) {
+func (d *Configuration) ConnectionUrl(migration bool) (string, error) {
 	cfg, err := mysql.ParseDSN(d.Connection)
 	if err != nil {
 		return "", err
@@ -99,7 +99,7 @@ func (d *MDuration) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func NewMigrator(lc fx.Lifecycle, settings Settings, log *zap.SugaredLogger) *Migrator {
+func NewMigrator(lc fx.Lifecycle, settings Configuration, log *zap.SugaredLogger) *Migrator {
 	m := &Migrator{
 		settings: settings,
 		log:      log,
