@@ -43,7 +43,7 @@ type ArmoryCloudPrincipalService struct {
 }
 
 // New creates an ArmoryCloudPrincipalService. It downloads JWKS from the Armory Auth Server & populates the JWK Cache for principal verification.
-func New(settings Settings) (*ArmoryCloudPrincipalService, error) {
+func New(settings Configuration) (*ArmoryCloudPrincipalService, error) {
 	jt := &JwtToken{
 		issuer: settings.JWT.JWTKeysURL,
 	}

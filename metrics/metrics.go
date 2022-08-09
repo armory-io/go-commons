@@ -19,6 +19,7 @@ package metrics
 import (
 	"context"
 	"fmt"
+	"github.com/armory-io/go-commons/metadata"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
@@ -56,9 +57,9 @@ type Metrics struct {
 	rootScope tally.Scope
 }
 
-func New(lc fx.Lifecycle, log *zap.SugaredLogger, settings Settings) *Metrics {
-	path := settings.Path
-	port := settings.Port
+func New(lc fx.Lifecycle, log *zap.SugaredLogger, conf Configuration, app metadata.ApplicationMetadata) *Metrics {
+	path := conf.Path
+	port := conf.Port
 
 	if path == "" {
 		path = "/metrics"
@@ -75,7 +76,13 @@ func New(lc fx.Lifecycle, log *zap.SugaredLogger, settings Settings) *Metrics {
 		CachedReporter:  reporter,
 		Separator:       tallyprom.DefaultSeparator,
 		SanitizeOptions: &sanitizeOptions,
-		Tags:            getBaseTags(settings),
+		Tags: map[string]string{
+			"appName":     app.Name,
+			"version":     app.Version,
+			"hostname":    app.Hostname,
+			"environment": app.Environment,
+			"replicaset":  app.Replicaset,
+		},
 	}
 
 	scope, closer := tally.NewRootScope(scopeOpts, time.Second)

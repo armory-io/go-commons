@@ -64,7 +64,7 @@ func TestDuration_Err(t *testing.T) {
 }
 
 func TestDatabase_ConnectionUrl(t *testing.T) {
-	set := Settings{
+	set := Configuration{
 		Connection:      "net(localhost:3006)/test",
 		User:            "root",
 		Password:        "mypassword",
@@ -81,7 +81,7 @@ func TestDatabase_ConnectionUrl(t *testing.T) {
 }
 
 func TestDatabase_ConnectionUrl2(t *testing.T) {
-	set := Settings{
+	set := Configuration{
 		Connection: "that_is_not_a_connection_string",
 	}
 	_, err := set.ConnectionUrl(false)

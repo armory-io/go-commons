@@ -31,10 +31,10 @@ import (
 type Configuration struct {
 	fx.Out
 
-	Server   armoryhttp.ServerSettings
-	Metrics  metrics.Settings
-	Auth     iam.Settings
-	Database mysql.Settings
+	Server   armoryhttp.Configuration
+	Metrics  metrics.Configuration
+	Auth     iam.Configuration
+	Database mysql.Configuration
 }
 
 var Module = fx.Module("armory-application",
