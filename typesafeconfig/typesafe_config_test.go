@@ -256,7 +256,7 @@ func (s *TypesafeConfigTestSuite) TestResolve() {
 			},
 			envVars: []kvPair{
 				{
-					key:   "PROFILES_ACTIVE",
+					key:   "ADDITIONAL_ACTIVE_PROFILES",
 					value: "prod",
 				},
 			},

@@ -44,6 +44,7 @@ import (
 	"golang.org/x/exp/maps"
 	"gopkg.in/yaml.v3"
 	"io/fs"
+	"k8s.io/utils/strings/slices"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -119,12 +120,10 @@ func defaultResolver() *resolver {
 		configurationDirs = append(configurationDirs, filepath.Join(usr.HomeDir, ".armory"))
 	}
 
-	profiles := strings.Split(os.Getenv("PROFILES_ACTIVE"), ",")
-
 	return &resolver{
 		baseNames:          []string{"application"},
 		configurationDirs:  configurationDirs,
-		profiles:           profiles,
+		profiles:           []string{},
 		explicitProperties: make(map[string]any),
 	}
 }
@@ -400,6 +399,12 @@ func getConfigurationFileCandidates(
 	baseNames []string,
 	profiles []string,
 ) []string {
+	envVarSetProfiles := strings.Split(os.Getenv("ADDITIONAL_ACTIVE_PROFILES"), ",")
+	for _, profile := range envVarSetProfiles {
+		if !slices.Contains(profiles, profile) {
+			profiles = append(profiles, profile)
+		}
+	}
 	var candidates []string
 	for _, dir := range configurationDirs {
 		for _, baseName := range baseNames {
@@ -413,5 +418,6 @@ func getConfigurationFileCandidates(
 			}
 		}
 	}
+
 	return candidates
 }
