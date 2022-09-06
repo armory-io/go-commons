@@ -22,10 +22,23 @@ import (
 	"github.com/armory-io/go-commons/iam"
 	"github.com/armory-io/go-commons/metrics"
 	"github.com/gin-gonic/gin"
+	"github.com/samber/lo"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"net/http"
 )
+
+type AllowWithoutAuth struct {
+	fx.Out
+
+	Routes []string `group:"allow-without-auth"`
+}
+
+type GinServerParams struct {
+	fx.In
+
+	Allowed [][]string `group:"allow-without-auth"`
+}
 
 func NewGinServer(
 	lifecycle fx.Lifecycle,
@@ -33,6 +46,7 @@ func NewGinServer(
 	logger *zap.SugaredLogger,
 	ps *iam.ArmoryCloudPrincipalService,
 	ms *metrics.Metrics,
+	gsp GinServerParams,
 ) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	g := gin.New()
@@ -47,7 +61,7 @@ func NewGinServer(
 	// but we need to make sure the middleware are applied in order.
 	g.Use(armoryhttp.GinClientVersionMiddleware)
 	g.Use(metrics.GinHTTPMiddleware(ms))
-	g.Use(iam.GinAuthMiddleware(ps))
+	g.Use(iam.GinAuthMiddleware(ps, lo.Flatten(gsp.Allowed)))
 
 	server := armoryhttp.NewServer(config)
 

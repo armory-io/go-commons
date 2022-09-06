@@ -25,8 +25,17 @@ import (
 	"strings"
 )
 
-func GinAuthMiddleware(ps *ArmoryCloudPrincipalService) gin.HandlerFunc {
+func GinAuthMiddleware(ps *ArmoryCloudPrincipalService, allowWithoutAuthList []string) gin.HandlerFunc {
+
+	allowList := make(map[string]bool)
+	for _, route := range allowWithoutAuthList {
+		allowList[route] = true
+	}
+
 	return func(c *gin.Context) {
+		if allowList[c.FullPath()] {
+			return
+		}
 		auth, err := extractBearerToken(c.Request)
 		if err != nil {
 			ginErrWriter(c, http.StatusUnauthorized, err.Error())
