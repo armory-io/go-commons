@@ -47,6 +47,7 @@ func TestGinPrincipalMiddleware(test *testing.T) {
 		desc       string
 		fetcher    *MockJwtFetcher
 		headers    map[string]string
+		allow      []string
 		statusCode int
 		errorMsg   string
 		assertion  func(t *testing.T, tc PrincipalServiceTest)
@@ -93,6 +94,15 @@ func TestGinPrincipalMiddleware(test *testing.T) {
 			},
 			statusCode: http.StatusOK,
 		},
+		{
+			desc:    "allowed routes bypass auth",
+			fetcher: &MockJwtFetcher{},
+			headers: map[string]string{
+				"good": "dobry",
+			},
+			allow:      []string{"/"},
+			statusCode: http.StatusOK,
+		},
 	}
 
 	for _, c := range cases {
@@ -101,15 +111,23 @@ func TestGinPrincipalMiddleware(test *testing.T) {
 				JwtFetcher: c.fetcher,
 			}
 
+			allowList := []string{}
+			allowList = append(c.allow)
+
 			g := gin.Default()
 
-			g.Use(GinAuthMiddleware(a))
+			g.Use(GinAuthMiddleware(a, allowList))
 			g.Use(func(gc *gin.Context) {
 				p, err := ExtractPrincipalFromContext(gc.Request.Context())
-				assert.NoError(t, err, "Downstream should always have a principal in the request context")
-				assert.NotNilf(t, p, "Downstream should always have a principal in the request context")
-				if c.errorMsg != "" {
-					assert.Equal(t, true, false, "Should never reach next handler in the chain")
+				if len(allowList) < 1 {
+					assert.NoError(t, err, "Downstream should always have a principal in the request context")
+					assert.NotNilf(t, p, "Downstream should always have a principal in the request context")
+					if c.errorMsg != "" {
+						assert.Equal(t, true, false, "Should never reach next handler in the chain")
+					}
+				} else {
+					assert.Error(t, err, "Downstream should not have a principal on a public route")
+					assert.Nilf(t, p, "Downstream should not have a principal on a public route")
 				}
 			})
 
