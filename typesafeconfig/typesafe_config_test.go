@@ -48,6 +48,11 @@ type TypesafeConfigTestSuite struct {
 	VariableThatShouldStartAtFive int
 }
 
+type kvPair struct {
+	key   string
+	value string
+}
+
 // Make sure that VariableThatShouldStartAtFive is set to five
 // before each test
 func (s *TypesafeConfigTestSuite) SetupSuite() {
@@ -228,10 +233,6 @@ func (s *TypesafeConfigTestSuite) TestMergeSources() {
 }
 
 func (s *TypesafeConfigTestSuite) TestResolve() {
-	type kvPair struct {
-		key   string
-		value string
-	}
 
 	tests := []struct {
 		name     string
@@ -439,8 +440,58 @@ func (s *TypesafeConfigTestSuite) TestResolve() {
 	}
 }
 
+func (s *TypesafeConfigTestSuite) TestGetConfigurationFileCandidates() {
+	tests := []struct {
+		name              string
+		expected          []string
+		configurationDirs []string
+		baseNames         []string
+		profiles          []string
+		envVars           []kvPair
+	}{
+		{
+			name:              "test that getConfigurationFileCandidates applies ADDITIONAL_ACTIVE_PROFILES last and that profiles are applied in order when there are multiple dirs",
+			configurationDirs: []string{"/foo", "/bar"},
+			baseNames:         []string{"my-app"},
+			profiles:          []string{"prod"},
+			envVars: []kvPair{
+				{
+					key:   "ADDITIONAL_ACTIVE_PROFILES",
+					value: "prod-overrides",
+				},
+			},
+			expected: []string{
+				"/foo/my-app.yaml",
+				"/foo/my-app.yml",
+				"/bar/my-app.yaml",
+				"/bar/my-app.yml",
+				"/foo/my-app-prod.yaml",
+				"/foo/my-app-prod.yml",
+				"/bar/my-app-prod.yaml",
+				"/bar/my-app-prod.yml",
+				"/foo/my-app-prod-overrides.yaml",
+				"/foo/my-app-prod-overrides.yml",
+				"/bar/my-app-prod-overrides.yaml",
+				"/bar/my-app-prod-overrides.yml",
+			},
+		},
+	}
+	for _, tc := range tests {
+		s.T().Run(tc.name, func(t *testing.T) {
+			for _, enVar := range tc.envVars {
+				os.Setenv(enVar.key, enVar.value)
+			}
+			actual := getConfigurationFileCandidates(tc.configurationDirs, tc.baseNames, tc.profiles)
+			assert.Equal(t, tc.expected, actual)
+			for _, enVar := range tc.envVars {
+				os.Unsetenv(enVar.key)
+			}
+		})
+	}
+}
+
 // In order for 'go test' to run this suite, we need to create
 // a normal test function and pass our suite to suite.Run
-func TestExampleTestSuite(t *testing.T) {
+func TestTypesafeConfigTestSuite(t *testing.T) {
 	suite.Run(t, new(TypesafeConfigTestSuite))
 }

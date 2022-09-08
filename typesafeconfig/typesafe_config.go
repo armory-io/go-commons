@@ -406,12 +406,14 @@ func getConfigurationFileCandidates(
 		}
 	}
 	var candidates []string
-	for _, dir := range configurationDirs {
-		for _, baseName := range baseNames {
+	for _, baseName := range baseNames {
+		for _, dir := range configurationDirs {
 			candidates = append(candidates,
 				fmt.Sprintf("%s/%s.yaml", dir, baseName),
 				fmt.Sprintf("%s/%s.yml", dir, baseName))
-			for _, profile := range profiles {
+		}
+		for _, profile := range profiles {
+			for _, dir := range configurationDirs {
 				candidates = append(candidates,
 					fmt.Sprintf("%s/%s-%s.yaml", dir, baseName, profile),
 					fmt.Sprintf("%s/%s-%s.yml", dir, baseName, profile))
