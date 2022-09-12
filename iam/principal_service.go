@@ -99,8 +99,8 @@ func extractBearerToken(r *http.Request) (string, error) {
 	return auth, nil
 }
 
-func tokenToPrincipal(untypedPrincipal interface{}, scopes interface{}) (*ArmoryCloudPrincipal, error) {
-	principal, ok := untypedPrincipal.(map[string]interface{})
+func tokenToPrincipal(untypedPrincipal any, scopes any) (*ArmoryCloudPrincipal, error) {
+	principal, ok := untypedPrincipal.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("unexpected %s claim format found", armoryCloudPrincipalClaimNamespace)
 	}
@@ -124,7 +124,7 @@ func tokenToPrincipal(untypedPrincipal interface{}, scopes interface{}) (*Armory
 	if scopes != nil {
 		scopeStr, ok := scopes.(string)
 		if ok {
-			typedPrincipal.Scopes = strings.Split(scopeStr, " ")
+			typedPrincipal.Scopes = append(typedPrincipal.Scopes, strings.Split(scopeStr, " ")...)
 		}
 	}
 

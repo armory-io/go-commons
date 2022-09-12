@@ -38,7 +38,7 @@ type ArmoryCloudPrincipal struct {
 	EnvId       string        `json:"envId"`
 	ArmoryAdmin bool          `json:"armoryAdmin"`
 	Scopes      []string      `json:"scopes"`
-	Groups      []string      `json:"groups"`
+	Roles       []string      `json:"roles"`
 }
 
 func (p *ArmoryCloudPrincipal) Tenant() string {
