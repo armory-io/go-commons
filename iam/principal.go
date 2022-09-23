@@ -50,11 +50,20 @@ func (p *ArmoryCloudPrincipal) String() string {
 		p.Name, p.Type, p.OrgId, p.EnvId, strings.Join(p.Scopes, ", "))
 }
 
-func (p *ArmoryCloudPrincipal) HasScope(scope string) bool {
+func (p *ArmoryCloudPrincipal) UnsafeHasScope(scope string) bool {
 	// allow users to do everything until proper RBAC is in place
 	if p.Type == User {
 		return true
 	}
+	for _, s := range p.Scopes {
+		if s == scope {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *ArmoryCloudPrincipal) HasScope(scope string) bool {
 	for _, s := range p.Scopes {
 		if s == scope {
 			return true
