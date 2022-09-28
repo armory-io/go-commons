@@ -37,6 +37,8 @@ type ArmoryCloudPrincipal struct {
 	OrgName     string        `json:"orgName"`
 	EnvId       string        `json:"envId"`
 	ArmoryAdmin bool          `json:"armoryAdmin"`
+	Subject     string        `json:"sub"`
+	Issuer      string        `json:"iss"`
 	Scopes      []string      `json:"scopes"`
 	Roles       []string      `json:"roles"`
 }

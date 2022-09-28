@@ -25,7 +25,11 @@ import (
 	"github.com/lestrrat-go/jwx/jwt"
 )
 
-const scopeClaim = "scope"
+const (
+	scopeClaim = "scope"
+	subject    = "sub"
+	issuer     = "iss"
+)
 
 type JwtFetcher interface {
 	Download() error
@@ -76,6 +80,8 @@ func (j *JwtToken) Fetch(token []byte) (interface{}, interface{}, error) {
 	if !wasClaimPresent {
 		return nil, nil, errors.New("required armory cloud principal claim was missing from token")
 	}
+	untypedPrincipal.(map[string]interface{})[subject] = parsedJwt.Subject()
+	untypedPrincipal.(map[string]interface{})[issuer] = parsedJwt.Issuer()
 
 	scopes, _ := parsedJwt.Get(scopeClaim)
 
