@@ -44,6 +44,8 @@ func ArmoryLoggerProvider(appMd metadata.ApplicationMetadata) (*zap.SugaredLogge
 	loggerOptions := []zap.Option{
 		zap.WithCaller(true),
 		zap.Fields(baseLogFields...),
+		// our internal error handling will add stack traces intelligently.
+		zap.AddStacktrace(zap.DPanicLevel),
 	}
 
 	switch strings.ToLower(appMd.Environment) {

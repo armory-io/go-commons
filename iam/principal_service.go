@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"github.com/mitchellh/mapstructure"
 	"net/http"
 	"strings"
@@ -77,11 +78,24 @@ func (a *ArmoryCloudPrincipalService) ExtractAndVerifyPrincipalFromTokenBytes(to
 	return tokenToPrincipal(parsedJwt, scopes)
 }
 
+func (a *ArmoryCloudPrincipalService) VerifyPrincipalAndSetContext(tokenOrRawHeader string, c *gin.Context) error {
+	token := strings.TrimSpace(tokenOrRawHeader)
+	if strings.Contains(tokenOrRawHeader, bearerPrefix) {
+		token = strings.TrimPrefix(token, fmt.Sprintf("%s ", bearerPrefix))
+	}
+	p, err := a.ExtractAndVerifyPrincipalFromTokenString(token)
+	if err != nil {
+		return err
+	}
+	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), principalContextKey{}, *p))
+	return nil
+}
+
 func (a *ArmoryCloudPrincipalService) ExtractAndVerifyPrincipalFromTokenString(token string) (*ArmoryCloudPrincipal, error) {
 	return a.ExtractAndVerifyPrincipalFromTokenBytes([]byte(token))
 }
 
-func extractBearerToken(r *http.Request) (string, error) {
+func ExtractBearerToken(r *http.Request) (string, error) {
 	auth := r.Header.Get(authorizationHeader)
 	// Prefer the proxied header if it is present from Glados
 	if proxiedAuth := r.Header.Get(proxiedAuthorizationHeader); proxiedAuth != "" {
@@ -89,12 +103,12 @@ func extractBearerToken(r *http.Request) (string, error) {
 	}
 
 	if auth == "" {
-		return "", errors.New("Must provide Authorization header")
+		return "", errors.New("must provide Authorization header")
 	}
 
 	authHeader := strings.Split(auth, fmt.Sprintf("%s ", bearerPrefix))
 	if len(authHeader) != 2 {
-		return "", errors.New("Malformed token")
+		return "", errors.New("malformed token")
 	}
 	return auth, nil
 }
