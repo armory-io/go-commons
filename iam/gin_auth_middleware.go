@@ -36,7 +36,7 @@ func GinAuthMiddleware(ps *ArmoryCloudPrincipalService, allowWithoutAuthList []s
 		if allowList[c.FullPath()] {
 			return
 		}
-		auth, err := extractBearerToken(c.Request)
+		auth, err := ExtractBearerToken(c.Request)
 		if err != nil {
 			ginErrWriter(c, http.StatusUnauthorized, err.Error())
 			return

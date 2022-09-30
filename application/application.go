@@ -17,13 +17,13 @@
 package application
 
 import (
-	"github.com/armory-io/go-commons/gin"
 	armoryhttp "github.com/armory-io/go-commons/http"
 	"github.com/armory-io/go-commons/iam"
 	"github.com/armory-io/go-commons/logging"
 	"github.com/armory-io/go-commons/metadata"
 	"github.com/armory-io/go-commons/metrics"
 	"github.com/armory-io/go-commons/mysql"
+	"github.com/armory-io/go-commons/server"
 	"go.uber.org/fx"
 )
 
@@ -40,7 +40,7 @@ type Configuration struct {
 var Module = fx.Module("armory-application",
 	logging.Module,
 	metadata.Module,
+	server.Module,
 	fx.Provide(metrics.New),
 	fx.Provide(iam.New),
-	fx.Provide(gin.NewGinServer),
 )
