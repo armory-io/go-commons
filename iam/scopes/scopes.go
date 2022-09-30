@@ -19,7 +19,7 @@ const (
 	TypeTargetGroup Type = "targetGroup"
 	TypeAccount     Type = "account"
 
-	ResourceDeployments  Resource = "deployments"
+	ResourceDeployment   Resource = "deployment"
 	ResourceTenant       Resource = "tenant"
 	ResourceOrganization Resource = "organization"
 	ResourceAgentHub     Resource = "agentHub"
@@ -29,6 +29,11 @@ const (
 )
 
 var (
+	ScopeOrganizationAdmin     = mustScope(TypeAPI, ResourceOrganization, PermissionFull)
+	ScopeTenantAdmin           = mustScope(TypeAPI, ResourceTenant, PermissionFull)
+	ScopeDeploymentsFullAccess = mustScope(TypeAPI, ResourceDeployment, PermissionFull)
+	ScopeRemoteNetworkAgent    = mustScope(TypeAPI, ResourceAgentHub, PermissionFull)
+
 	types       = []Type{TypeAPI, TypeAccount, TypeTargetGroup}
 	permissions = []Permission{PermissionFull}
 )
@@ -125,7 +130,7 @@ func (v validator) validatePermission(p Permission) error {
 }
 
 func (v validator) validateResourceForAPIType(r Resource) error {
-	if !oneOf([]Resource{ResourceDeployments, ResourceTenant, ResourceOrganization, ResourceAgentHub}, r) {
+	if !oneOf([]Resource{ResourceDeployment, ResourceTenant, ResourceOrganization, ResourceAgentHub}, r) {
 		return fmt.Errorf("%w: invalid resource for api type: %q", v.baseError, r)
 	}
 	return nil
@@ -145,4 +150,12 @@ func oneOf[T comparable](group []T, test T) bool {
 		}
 	}
 	return false
+}
+
+func mustScope(t Type, r Resource, p Permission) string {
+	scope, err := FromGrant(Grant{t, r, p})
+	if err != nil {
+		panic(err)
+	}
+	return scope
 }
