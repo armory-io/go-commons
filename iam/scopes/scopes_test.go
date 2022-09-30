@@ -10,7 +10,7 @@ func TestParse(t *testing.T) {
 	valid := []pair[string, Grant]{
 		pairFrom("api:organization:full", GrantFromStrings("api", "organization", "full")),
 		pairFrom("api:tenant:full", GrantFromStrings("api", "tenant", "full")),
-		pairFrom("api:deployments:full", GrantFromStrings("api", "deployments", "full")),
+		pairFrom("api:deployment:full", GrantFromStrings("api", "deployment", "full")),
 		pairFrom("api:agentHub:full", GrantFromStrings("api", "agentHub", "full")),
 		pairFrom("targetGroup:potato-facts:full", GrantFromStrings("targetGroup", "potato-facts", "full")),
 		pairFrom("account:eks-dev-cluster:full", GrantFromStrings("account", "eks-dev-cluster", "full")),
@@ -26,9 +26,9 @@ func TestParse(t *testing.T) {
 	}
 
 	invalid := []string{
-		"dachshund:deployments:full",
+		"dachshund:deployment:full",
 		"api:chihuahua:full",
-		"api:deployments:pomeranian",
+		"api:deployment:pomeranian",
 		"too:many:parts:here",
 		"targetGroup:*:full",
 		"api:*:full",
@@ -51,7 +51,7 @@ func TestGrantFrom(t *testing.T) {
 	valid := []pair[Grant, string]{
 		pairFrom(GrantFromStrings("api", "organization", "full"), "api:organization:full"),
 		pairFrom(GrantFromStrings("api", "tenant", "full"), "api:tenant:full"),
-		pairFrom(GrantFromStrings("api", "deployments", "full"), "api:deployments:full"),
+		pairFrom(GrantFromStrings("api", "deployment", "full"), "api:deployment:full"),
 		pairFrom(GrantFromStrings("api", "agentHub", "full"), "api:agentHub:full"),
 		pairFrom(GrantFromStrings("targetGroup", "potato-facts", "full"), "targetGroup:potato-facts:full"),
 		pairFrom(GrantFromStrings("account", "eks-dev-cluster", "full"), "account:eks-dev-cluster:full"),
@@ -67,9 +67,9 @@ func TestGrantFrom(t *testing.T) {
 	}
 
 	invalid := []Grant{
-		GrantFromStrings("dachshund", "deployments", "full"),
+		GrantFromStrings("dachshund", "deployment", "full"),
 		GrantFromStrings("api", "chihuahua", "full"),
-		GrantFromStrings("api", "deployments", "pomeranian"),
+		GrantFromStrings("api", "deployment", "pomeranian"),
 		GrantFromStrings("targetGroup", "*", "full"),
 		GrantFromStrings("api", "*", "full"),
 		GrantFromStrings("", "", ""),
