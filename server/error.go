@@ -1,21 +1,29 @@
 package server
 
-const defaultErrorCode = "42"
+import (
+	"go.uber.org/zap/zapcore"
+	"strconv"
+)
 
-// ErrorResponseContract the strongly typed error contract that will be returned to the client if a request is not successful
-type ErrorResponseContract struct {
-	ErrorId string                          `json:"error_id"`
-	Errors  []ErrorResponseContractErrorDTO `json:"errors"`
+const defaultErrorCode = 42
+
+// ResponseContract the strongly typed error contract that will be returned to the client if a request is not successful
+type ResponseContract struct {
+	ErrorId string                     `json:"error_id"`
+	Errors  []ResponseContractErrorDTO `json:"errors"`
 }
 
-type ErrorResponseContractErrorDTO struct {
+type ResponseContractErrorDTO struct {
 	Message  string         `json:"message"`
 	Metadata map[string]any `json:"metadata,omitempty"`
 	Code     string         `json:"code"`
 }
 
-// APIError an error that gets embedded in ErrorResponseContract when an error response is return to the client
+// APIError an error that gets embedded in ResponseContract when an error response is return to the client
 type APIError struct {
+	// Code The business/project error code this instance represents (not to be confused with the HTTP status code which can be retrieved via HttpStatusCode).
+	// This should never change for a given error so clients can rely on it and write code against it.
+	Code int
 	// Message the message that will be displayed the Client
 	Message string
 	// Metadata that about the error that will be returned to the client
@@ -65,6 +73,8 @@ type apiErrorResponse struct {
 	cause error
 	// stacktrace
 	stacktrace string
+	// origin
+	origin string
 }
 
 // Error
@@ -85,7 +95,7 @@ type Error interface {
 	Errors() []APIError
 	// ExtraDetailsForLogging Any extra details you want logged when this error is handled. Will never be null, but might be empty. NOTE: This will always be a mutable list so it can be modified at any time.
 	ExtraDetailsForLogging() []KVPair
-	// ExtraResponseHeaders Any extra headers you want sent to the caller when this error is handled.
+	// ExtraResponseHeaders Any extra headers you want sent to the origin when this error is handled.
 	ExtraResponseHeaders() []KVPair
 	// StackTraceLoggingBehavior Allows users to override the default behavior (logging stack traces for 5xx errors but not 4xx errors) and instead force stack trace on/off if they want to override the default 4xx vs. 5xx decision behavior.
 	StackTraceLoggingBehavior() StackTraceLoggingBehavior
@@ -95,8 +105,10 @@ type Error interface {
 	Cause() error
 	// Stacktrace The stacktrace of the error
 	Stacktrace() string
-	// ToErrorResponseContract converts the Error into a ErrorResponseContract
-	ToErrorResponseContract(errorId string) ErrorResponseContract
+	// Origin the origination of the API error
+	Origin() string
+	// ToErrorResponseContract converts the Error into a ResponseContract
+	ToErrorResponseContract(errorId string) ResponseContract
 }
 
 func (c *apiErrorResponse) Errors() []APIError {
@@ -127,18 +139,26 @@ func (c *apiErrorResponse) Stacktrace() string {
 	return c.stacktrace
 }
 
-func (c *apiErrorResponse) ToErrorResponseContract(errorId string) ErrorResponseContract {
-	var errors []ErrorResponseContractErrorDTO
+func (c *apiErrorResponse) Origin() string {
+	return c.origin
+}
 
-	// TODO if error code isn't set default it to defaultErrorCode
+func (c *apiErrorResponse) ToErrorResponseContract(errorId string) ResponseContract {
+	var errors []ResponseContractErrorDTO
+
 	for _, err := range c.errors {
-		errors = append(errors, ErrorResponseContractErrorDTO{
+		code := err.Code
+		if code == 0 {
+			code = defaultErrorCode
+		}
+		errors = append(errors, ResponseContractErrorDTO{
 			Message:  err.Message,
 			Metadata: err.Metadata,
+			Code:     strconv.Itoa(code),
 		})
 	}
 
-	return ErrorResponseContract{
+	return ResponseContract{
 		ErrorId: errorId,
 		Errors:  errors,
 	}
@@ -185,24 +205,45 @@ func WithStackTraceLoggingBehavior(behavior StackTraceLoggingBehavior) Option {
 
 // NewErrorResponseFromApiError Given a Single APIError and the given Option's returns an instance of Error
 func NewErrorResponseFromApiError(error APIError, opts ...Option) Error {
-	aec := &apiErrorResponse{
-		stackTraceLoggingBehavior: DeferToDefaultBehavior,
-		stacktrace:                takeStacktrace(1),
-		errors:                    []APIError{error},
-	}
-	for _, option := range opts {
-		option(aec)
-	}
-
-	return aec
+	return NewErrorResponseFromApiErrors([]APIError{error}, opts...)
 }
 
 // NewErrorResponseFromApiErrors Given multiple APIError's and the given Option's returns an instance of Error
 func NewErrorResponseFromApiErrors(errors []APIError, opts ...Option) Error {
+	// get the stacktrace and caller for the error, so it can be logged
+	// Ported from zap
+	stack := captureStacktrace(2, stacktraceFull)
+	defer stack.Free()
+	stackBuffer := get()
+	defer stackBuffer.Free()
+	origin := ""
+	stacktrace := ""
+	if stack.Count() != 0 {
+		frame, more := stack.Next()
+
+		caller := zapcore.EntryCaller{
+			Defined:  frame.PC != 0,
+			PC:       frame.PC,
+			File:     frame.File,
+			Line:     frame.Line,
+			Function: frame.Function,
+		}
+		origin = caller.TrimmedPath()
+		stackfmt := newStackFormatter(stackBuffer)
+		// We've already extracted the first frame, so format that
+		// separately and defer to stackfmt for the rest.
+		stackfmt.FormatFrame(frame)
+		if more {
+			stackfmt.FormatStack(stack)
+		}
+		stacktrace = stackBuffer.String()
+	}
+
 	aec := &apiErrorResponse{
 		stackTraceLoggingBehavior: DeferToDefaultBehavior,
-		stacktrace:                takeStacktrace(1),
+		stacktrace:                stacktrace,
 		errors:                    errors,
+		origin:                    origin,
 	}
 	for _, option := range opts {
 		option(aec)

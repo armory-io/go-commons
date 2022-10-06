@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	armoryhttp "github.com/armory-io/go-commons/http"
 	"github.com/armory-io/go-commons/iam"
@@ -31,13 +32,13 @@ var sensitiveHeaderNamesInLowerCase = []string{
 func ConfigureAndStartHttpServer(
 	lifecycle fx.Lifecycle,
 	config armoryhttp.Configuration,
-	log *zap.SugaredLogger,
+	logger *zap.SugaredLogger,
 	ms *metrics.Metrics,
-	serverControllers Controllers,
-	managementControllers ManagementControllers,
+	serverControllers controllers,
+	managementControllers managementControllers,
 	ps *iam.ArmoryCloudPrincipalService,
 	md metadata.ApplicationMetadata,
-) {
+) error {
 	gin.SetMode(gin.ReleaseMode)
 	g := gin.New()
 
@@ -46,27 +47,22 @@ func ConfigureAndStartHttpServer(
 	// Dist Tracing
 	g.Use(otelgin.Middleware(md.Name))
 
-	v := validator.New()
-	calmLogger := log.Desugar().WithOptions(zap.AddStacktrace(zap.DPanicLevel)).Sugar()
+	requestValidator := validator.New()
 
-	AuthNotRequiredGroup := g.Group("")
-	AuthRequiredGroup := g.Group("")
-	AuthRequiredGroup.Use(GinAuthMiddlewareV2(ps, calmLogger))
+	authNotEnforcedGroup := g.Group("")
+	authRequiredGroup := g.Group("")
+	authRequiredGroup.Use(ginAuthMiddleware(ps, logger))
 
-	// TODO determine whether or not management controllers should be ran on the server port or not
-	// TODO ensure that metrics endpoints are here too
-	// if not bootstrap new gin server
-	mAuthNotRequiredGroup := AuthNotRequiredGroup
-	mAuthRequiredGroup := AuthRequiredGroup
-
-	// Wire up server controllers
-	for _, c := range serverControllers.Controllers {
-		registerHandlers(c, log, AuthNotRequiredGroup, AuthRequiredGroup, calmLogger, v)
+	handlerRegistry, err := newHandlerRegistry(logger, requestValidator, serverControllers.Controllers, managementControllers.Controllers)
+	if err != nil {
+		return err
 	}
 
-	// Wire up management controllers, metrics, health, info, tracing-samples, etc
-	for _, c := range managementControllers.Controllers {
-		registerHandlers(c, log, mAuthNotRequiredGroup, mAuthRequiredGroup, calmLogger, v)
+	if err = handlerRegistry.registerHandlers(registerHandlersInput{
+		AuthRequiredGroup:    authRequiredGroup,
+		AuthNotEnforcedGroup: authNotEnforcedGroup,
+	}); err != nil {
+		return err
 	}
 
 	server := armoryhttp.NewServer(config)
@@ -75,7 +71,7 @@ func ConfigureAndStartHttpServer(
 		OnStart: func(ctx context.Context) error {
 			go func() {
 				if err := server.Start(g); err != nil {
-					log.Errorf("Failed to start server: %s", err)
+					logger.Fatalf("Failed to start server: %s", err)
 				}
 			}()
 			return nil
@@ -84,34 +80,8 @@ func ConfigureAndStartHttpServer(
 			return server.Shutdown(ctx)
 		},
 	})
-}
 
-func registerHandlers(
-	c controller,
-	log *zap.SugaredLogger,
-	AuthNotRequiredGroup *gin.RouterGroup,
-	AuthRequiredGroup *gin.RouterGroup,
-	calmLogger *zap.SugaredLogger,
-	v *validator.Validate,
-) {
-	controllerConfig := &controllerConfig{}
-
-	if c, ok := c.(ControllerPrefix); ok {
-		controllerConfig.prefix = c.Prefix()
-	}
-
-	if c, ok := c.(ControllerAuthZValidator); ok {
-		controllerConfig.authZValidator = c.AuthZValidator
-	}
-
-	for _, handler := range c.Handlers() {
-		log.Infof("Registering REST handler %s %s", handler.Config().Method, handler.Config().Path)
-		if handler.Config().AuthOptOut {
-			handler.Register(AuthNotRequiredGroup, calmLogger, v, controllerConfig)
-		} else {
-			handler.Register(AuthRequiredGroup, calmLogger, v, controllerConfig)
-		}
-	}
+	return nil
 }
 
 func NewRequestResponseHandler[REQUEST, RESPONSE any](f func(ctx context.Context, request REQUEST) (*Response[RESPONSE], Error), config HandlerConfig) Handler {
@@ -121,28 +91,13 @@ func NewRequestResponseHandler[REQUEST, RESPONSE any](f func(ctx context.Context
 	}
 }
 
-func (r *handler[REQUEST, RESPONSE]) Register(g gin.IRoutes, log *zap.SugaredLogger, v *validator.Validate, config *controllerConfig) {
-	registerHandler(g, log, r.config, config, func(c *gin.Context) Error {
-		response, apiErr := r.delegate(c, v)
-		if apiErr != nil {
-			return apiErr
-		}
-
-		statusCode := http.StatusOK
-		if r.config.StatusCode != 0 {
-			statusCode = r.config.StatusCode
-		}
-		if response.StatusCode != 0 {
-			statusCode = response.StatusCode
-		}
-		c.Writer.WriteHeader(statusCode)
-		return writeResponse(r.config, response.Body, c.Writer)
-	})
+func (r *handler[REQUEST, RESPONSE]) GetHigherOrderHandlerFunc(log *zap.SugaredLogger, requestValidator *validator.Validate, config *handlerDTO) gin.HandlerFunc {
+	return createHigherOrderHandlerFunc(r.handleFunc, config, requestValidator, log)
 }
 
-func writeResponse(config HandlerConfig, body any, w gin.ResponseWriter) Error {
-	w.Header().Set("Content-Type", config.Produces)
-	switch config.Produces {
+func writeResponse(contentType string, body any, w gin.ResponseWriter) Error {
+	w.Header().Set("Content-Type", contentType)
+	switch contentType {
 	case "plain/text":
 		t := reflect.TypeOf(body)
 		if t.Kind() != reflect.String {
@@ -179,47 +134,6 @@ func (r *handler[REQUEST, RESPONSE]) Config() HandlerConfig {
 	return r.config
 }
 
-func (r *handler[REQUEST, RESPONSE]) delegate(c *gin.Context, v *validator.Validate) (*Response[RESPONSE], Error) {
-	method := r.config.Method
-	if method == http.MethodGet || method == http.MethodDelete {
-		var req REQUEST
-		if err := decodeInto(extract(c), &req); err != nil {
-			return nil, NewErrorResponseFromApiError(APIError{
-				Message:        "Failed to extract request parameters",
-				HttpStatusCode: http.StatusBadRequest,
-			}, WithCause(err))
-		}
-		return r.handleFunc(c.Request.Context(), req)
-	} else if method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch {
-		b, err := io.ReadAll(c.Request.Body)
-		if err != nil {
-			return nil, NewErrorResponseFromApiError(APIError{
-				Message:        "Failed to read request",
-				HttpStatusCode: http.StatusBadRequest,
-			}, WithCause(err))
-		}
-
-		var req REQUEST
-		if err := json.Unmarshal(b, &req); err != nil {
-			return nil, NewErrorResponseFromApiError(APIError{
-				Message:        "Failed to unmarshal request",
-				HttpStatusCode: http.StatusBadRequest,
-			}, WithCause(err))
-		}
-
-		if apiErr := validateRequestBody(req, v); apiErr != nil {
-			return nil, apiErr
-		}
-
-		return r.handleFunc(c.Request.Context(), req)
-	}
-
-	return nil, NewErrorResponseFromApiError(APIError{
-		Message:        "Method Not Allowed",
-		HttpStatusCode: http.StatusMethodNotAllowed,
-	})
-}
-
 func validateRequestBody[T any](req T, v *validator.Validate) Error {
 	err := v.Struct(req)
 	if err != nil {
@@ -248,32 +162,17 @@ func validateRequestBody[T any](req T, v *validator.Validate) Error {
 	return nil
 }
 
-func registerHandler(g gin.IRoutes, log *zap.SugaredLogger, hConfig HandlerConfig, cConfig *controllerConfig, f func(c *gin.Context) Error) {
-	path := hConfig.Path
-	if cConfig.prefix != "" {
-		tPre := strings.TrimSuffix(cConfig.prefix, "/")
-		tPath := strings.TrimPrefix(path, "/")
-		path = strings.TrimSuffix(fmt.Sprintf("%s/%s",
-			tPre,
-			tPath,
-		), "/")
-		log.Debugf("Registering handler at path: %s", path)
-	}
-	g.Handle(hConfig.Method, path, func(c *gin.Context) {
-		if apiErr := handle(c, hConfig, cConfig, f); apiErr != nil {
-			WriteAndLogApiError(apiErr, c, log)
-		}
-	})
-}
-
-func WriteAndLogApiError(apiErr Error, c *gin.Context, log *zap.SugaredLogger) {
+// writeAndLogApiErrorThenAbort a helper function that will take a Response and ensure that it is logged and a properly
+// formatted response is returned to the requester
+func writeAndLogApiErrorThenAbort(apiErr Error, c *gin.Context, log *zap.SugaredLogger) {
 	errorID := uuid.NewString()
 	statusCode := http.StatusInternalServerError
 	if c := apiErr.Errors()[0].HttpStatusCode; c != 0 {
 		statusCode = c
 	}
-	WriteErrorResponse(c.Writer, apiErr, statusCode, errorID, log)
+	writeErrorResponse(c.Writer, apiErr, statusCode, errorID, log)
 	logAPIError(c, errorID, apiErr, statusCode, log)
+	c.Abort()
 }
 
 func logAPIError(
@@ -326,6 +225,10 @@ func logAPIError(
 		break
 	}
 
+	if apiErr.Origin() != "" {
+		fields = append(fields, "origin", apiErr.Origin())
+	}
+
 	// Add metadata about the request principal if present to the logging fields
 	principal, _ := iam.ExtractPrincipalFromContext(c.Request.Context())
 	if principal != nil {
@@ -354,7 +257,7 @@ func logAPIError(
 	log.With(fields...).Error(msg)
 }
 
-func WriteErrorResponse(writer gin.ResponseWriter, apiErr Error, statusCode int, errorID string, log *zap.SugaredLogger) {
+func writeErrorResponse(writer gin.ResponseWriter, apiErr Error, statusCode int, errorID string, log *zap.SugaredLogger) {
 	writer.Header().Set("content-type", "application/json")
 
 	for _, header := range apiErr.ExtraResponseHeaders() {
@@ -368,24 +271,7 @@ func WriteErrorResponse(writer gin.ResponseWriter, apiErr Error, statusCode int,
 	}
 }
 
-func handle(c *gin.Context, hConfig HandlerConfig, cConfig *controllerConfig, f func(c *gin.Context) Error) Error {
-	if !hConfig.AuthOptOut {
-		if err := authorizeRequest(c.Request.Context(), cConfig, hConfig); err != nil {
-			return err
-		}
-	}
-	return f(c)
-}
-
-func authorizeRequest(ctx context.Context, cConfig *controllerConfig, hConfig HandlerConfig) Error {
-	var authZValidators []AuthZValidator
-	if cConfig.authZValidator != nil {
-		authZValidators = append(authZValidators, cConfig.authZValidator)
-	}
-	if hConfig.AuthZValidator != nil {
-		authZValidators = append(authZValidators, hConfig.AuthZValidator)
-	}
-
+func authorizeRequest(ctx context.Context, h *handlerDTO) Error {
 	// If the handler has not opted out of AuthN/AuthZ, extract the principal
 	principal, err := iam.ExtractPrincipalFromContext(ctx)
 	if err != nil {
@@ -395,7 +281,7 @@ func authorizeRequest(ctx context.Context, cConfig *controllerConfig, hConfig Ha
 		}, WithCause(err))
 	}
 
-	for _, authZValidator := range authZValidators {
+	for _, authZValidator := range h.AuthZValidators {
 		// If the handler has provided an AuthZ Validation Function, execute it.
 		if msg, authorized := authZValidator(principal); !authorized {
 			return NewErrorResponseFromApiError(APIError{
@@ -441,4 +327,103 @@ func extract(c *gin.Context) map[string]any {
 		extracted[key] = value[0]
 	}
 	return extracted
+}
+
+type requestDetailsKey struct{}
+
+func GetRequestDetailsFromContext(ctx context.Context) (*RequestDetails, error) {
+	v, ok := ctx.Value(requestDetailsKey{}).(RequestDetails)
+	if !ok {
+		return nil, errors.New("unable to extract request details")
+	}
+	return &v, nil
+}
+
+// createHigherOrderHandler creates a higher order gin handler function, that wraps the IController handler function with a function that deals with the common request/response logic
+func createHigherOrderHandlerFunc[REQUEST, RESPONSE any](
+	handlerFn func(ctx context.Context, request REQUEST) (*Response[RESPONSE], Error),
+	handler *handlerDTO,
+	requestValidator *validator.Validate,
+	logger *zap.SugaredLogger,
+) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !handler.AuthOptOut {
+			if err := authorizeRequest(c.Request.Context(), handler); err != nil {
+				writeAndLogApiErrorThenAbort(err, c, logger)
+			}
+		}
+
+		var pathParameters = make(map[string]string)
+		for _, p := range c.Params {
+			pathParameters[p.Key] = p.Value
+		}
+
+		// Stuff Request details into the context
+		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), requestDetailsKey{}, RequestDetails{
+			QueryParameters: c.Request.URL.Query(),
+			PathParameters:  pathParameters,
+			Headers:         c.Request.Header,
+		}))
+
+		var response *Response[RESPONSE]
+		var apiError Error
+		switch handler.Method {
+		case http.MethodGet, http.MethodDelete:
+			var req REQUEST
+			response, apiError = handlerFn(c.Request.Context(), req)
+			break
+		case http.MethodPost, http.MethodPut, http.MethodPatch:
+			b, err := io.ReadAll(c.Request.Body)
+			if err != nil {
+				apiError = NewErrorResponseFromApiError(APIError{
+					Message:        "Failed to read request",
+					HttpStatusCode: http.StatusBadRequest,
+				}, WithCause(err))
+				break
+			}
+
+			// TODO what if the handler doesn't need a body/object
+			// handle null body
+			var req REQUEST
+			if err := json.Unmarshal(b, &req); err != nil {
+				apiError = NewErrorResponseFromApiError(APIError{
+					Message:        "Failed to unmarshal request",
+					HttpStatusCode: http.StatusBadRequest,
+				}, WithCause(err))
+				break
+			}
+
+			if apiError = validateRequestBody(req, requestValidator); apiError != nil {
+				break
+			}
+
+			response, apiError = handlerFn(c.Request.Context(), req)
+			break
+		default:
+			apiError = NewErrorResponseFromApiError(APIError{
+				Message:        "Method Not Allowed",
+				HttpStatusCode: http.StatusMethodNotAllowed,
+			})
+			break
+		}
+
+		if apiError != nil {
+			writeAndLogApiErrorThenAbort(apiError, c, logger)
+			return
+		}
+
+		statusCode := http.StatusOK
+		if handler.StatusCode != 0 {
+			statusCode = handler.StatusCode
+		}
+		if response.StatusCode != 0 {
+			statusCode = response.StatusCode
+		}
+		c.Writer.WriteHeader(statusCode)
+		apiError = writeResponse(handler.Produces, response.Body, c.Writer)
+		if apiError != nil {
+			writeAndLogApiErrorThenAbort(apiError, c, logger)
+			return
+		}
+	}
 }

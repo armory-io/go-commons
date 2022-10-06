@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-func GinAuthMiddlewareV2(ps *iam.ArmoryCloudPrincipalService, log *zap.SugaredLogger) gin.HandlerFunc {
+func ginAuthMiddleware(ps *iam.ArmoryCloudPrincipalService, log *zap.SugaredLogger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// extract access token from request
 		auth, err := iam.ExtractBearerToken(c.Request)
@@ -16,7 +16,7 @@ func GinAuthMiddlewareV2(ps *iam.ArmoryCloudPrincipalService, log *zap.SugaredLo
 				Message:        "Failed to extract access token from request",
 				HttpStatusCode: http.StatusUnauthorized,
 			}, WithCause(err))
-			WriteAndLogApiError(apiErr, c, log)
+			writeAndLogApiErrorThenAbort(apiErr, c, log)
 			c.Abort()
 			return
 		}
@@ -26,7 +26,7 @@ func GinAuthMiddlewareV2(ps *iam.ArmoryCloudPrincipalService, log *zap.SugaredLo
 				Message:        "Failed to verify principal from access token",
 				HttpStatusCode: http.StatusUnauthorized,
 			}, WithCause(err))
-			WriteAndLogApiError(apiErr, c, log)
+			writeAndLogApiErrorThenAbort(apiErr, c, log)
 			c.Abort()
 			return
 		}

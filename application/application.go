@@ -20,6 +20,7 @@ import (
 	armoryhttp "github.com/armory-io/go-commons/http"
 	"github.com/armory-io/go-commons/iam"
 	"github.com/armory-io/go-commons/logging"
+	"github.com/armory-io/go-commons/management"
 	"github.com/armory-io/go-commons/metadata"
 	"github.com/armory-io/go-commons/metrics"
 	"github.com/armory-io/go-commons/mysql"
@@ -41,6 +42,7 @@ var Module = fx.Module("armory-application",
 	logging.Module,
 	metadata.Module,
 	server.Module,
+	management.Module,
 	fx.Provide(metrics.New),
 	fx.Provide(iam.New),
 )

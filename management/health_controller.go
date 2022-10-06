@@ -1,7 +1,8 @@
-package server
+package management
 
 import (
 	"context"
+	"github.com/armory-io/go-commons/server"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"net/http"
@@ -17,8 +18,8 @@ type HealthCheckResponse struct {
 	Info   map[string]any `json:"info,omitempty"`
 }
 
-func NewHealthCheckController(log *zap.SugaredLogger, i Indicators) ManagementController {
-	return ManagementController{
+func NewHealthCheckController(log *zap.SugaredLogger, i Indicators) server.ManagementController {
+	return server.ManagementController{
 		Controller: &HealthController{
 			log:              log,
 			healthIndicators: i.HealthIndicators,
@@ -49,14 +50,14 @@ type Indicator struct {
 	HealthIndicator indicator `group:"health-check"`
 }
 
-func (c *HealthController) Handlers() []Handler {
-	return []Handler{
-		NewRequestResponseHandler(c.readinessCheckHandler, HandlerConfig{
+func (c *HealthController) Handlers() []server.Handler {
+	return []server.Handler{
+		server.NewRequestResponseHandler(c.readinessCheckHandler, server.HandlerConfig{
 			Path:       "/health/readiness",
 			Method:     http.MethodGet,
 			AuthOptOut: true,
 		}),
-		NewRequestResponseHandler(c.livenessCheckHandler, HandlerConfig{
+		server.NewRequestResponseHandler(c.livenessCheckHandler, server.HandlerConfig{
 			Path:       "/health/liveness",
 			Method:     http.MethodGet,
 			AuthOptOut: true,
@@ -64,7 +65,7 @@ func (c *HealthController) Handlers() []Handler {
 	}
 }
 
-func (c *HealthController) readinessCheckHandler(_ context.Context, _ Void) (*Response[HealthCheckResponse], Error) {
+func (c *HealthController) readinessCheckHandler(_ context.Context, _ server.Void) (*server.Response[HealthCheckResponse], server.Error) {
 	statusCode := http.StatusServiceUnavailable
 	status := "unavailable"
 	isReady := true
@@ -85,7 +86,7 @@ func (c *HealthController) readinessCheckHandler(_ context.Context, _ Void) (*Re
 		status = "ok"
 	}
 
-	return &Response[HealthCheckResponse]{
+	return &server.Response[HealthCheckResponse]{
 		Body: HealthCheckResponse{
 			Status: status,
 			Info:   info,
@@ -94,7 +95,7 @@ func (c *HealthController) readinessCheckHandler(_ context.Context, _ Void) (*Re
 	}, nil
 }
 
-func (c *HealthController) livenessCheckHandler(_ context.Context, _ Void) (*Response[HealthCheckResponse], Error) {
+func (c *HealthController) livenessCheckHandler(_ context.Context, _ server.Void) (*server.Response[HealthCheckResponse], server.Error) {
 	statusCode := http.StatusServiceUnavailable
 	status := "unavailable"
 	isAlive := true
@@ -115,7 +116,7 @@ func (c *HealthController) livenessCheckHandler(_ context.Context, _ Void) (*Res
 		status = "ok"
 	}
 
-	return &Response[HealthCheckResponse]{
+	return &server.Response[HealthCheckResponse]{
 		Body: HealthCheckResponse{
 			Status: status,
 			Info:   info,

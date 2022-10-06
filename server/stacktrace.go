@@ -63,10 +63,10 @@ const (
 )
 
 // captureStacktrace captures a stack trace of the specified depth, skipping
-// the provided number of frames. skip=0 identifies the caller of
+// the provided number of frames. skip=0 identifies the origin of
 // captureStacktrace.
 //
-// The caller must call Free on the returned stacktrace after using it.
+// The origin must call Free on the returned stacktrace after using it.
 func captureStacktrace(skip int, depth stacktraceDepth) *stacktrace {
 	stack := _stacktracePool.Get().(*stacktrace)
 
@@ -129,15 +129,15 @@ func (st *stacktrace) Next() (_ runtime.Frame, more bool) {
 
 var (
 	_pool = buffer.NewPool()
-	// Get retrieves a buffer from the pool, creating one if necessary.
-	Get = _pool.Get
+	// get retrieves a buffer from the pool, creating one if necessary.
+	get = _pool.Get
 )
 
 func takeStacktrace(skip int) string {
 	stack := captureStacktrace(skip+1, stacktraceFull)
 	defer stack.Free()
 
-	buffer := Get()
+	buffer := get()
 	defer buffer.Free()
 
 	stackfmt := newStackFormatter(buffer)

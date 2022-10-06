@@ -5,6 +5,5 @@ import (
 )
 
 var Module = fx.Options(
-	fx.Provide(NewHealthCheckController),
 	fx.Invoke(ConfigureAndStartHttpServer),
 )
