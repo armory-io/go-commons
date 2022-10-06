@@ -162,8 +162,8 @@ func SimpleResponse[T any](body T) *Response[T] {
 }
 
 func ConfigureAndStartHttpServer(
-	lifecycle fx.Lifecycle,
-	config armoryhttp.Configuration,
+	lc fx.Lifecycle,
+	config Configuration,
 	logger *zap.SugaredLogger,
 	ms *metrics.Metrics,
 	serverControllers controllers,
@@ -172,6 +172,39 @@ func ConfigureAndStartHttpServer(
 	md metadata.ApplicationMetadata,
 ) error {
 	gin.SetMode(gin.ReleaseMode)
+
+	if config.Management.Port == 0 {
+		var controllers []IController
+		controllers = append(controllers, serverControllers.Controllers...)
+		controllers = append(controllers, managementControllers.Controllers...)
+		err := configureServer("http + management", lc, config.HTTP, ps, logger, ms, md, controllers...)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	err := configureServer("http", lc, config.HTTP, ps, logger, ms, md, serverControllers.Controllers...)
+	if err != nil {
+		return err
+	}
+	err = configureServer("management", lc, config.Management, ps, logger, ms, md, managementControllers.Controllers...)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func configureServer(
+	name string,
+	lc fx.Lifecycle,
+	httpConfig armoryhttp.HTTP,
+	ps *iam.ArmoryCloudPrincipalService,
+	logger *zap.SugaredLogger,
+	ms *metrics.Metrics,
+	md metadata.ApplicationMetadata,
+	controllers ...IController,
+) error {
 	g := gin.New()
 
 	// Metrics
@@ -185,7 +218,7 @@ func ConfigureAndStartHttpServer(
 	authRequiredGroup := g.Group("")
 	authRequiredGroup.Use(ginAuthMiddleware(ps, logger))
 
-	handlerRegistry, err := newHandlerRegistry(logger, requestValidator, serverControllers.Controllers, managementControllers.Controllers)
+	handlerRegistry, err := newHandlerRegistry(logger, requestValidator, controllers)
 	if err != nil {
 		return err
 	}
@@ -197,10 +230,11 @@ func ConfigureAndStartHttpServer(
 		return err
 	}
 
-	server := armoryhttp.NewServer(config)
+	server := armoryhttp.NewServer(armoryhttp.Configuration{HTTP: httpConfig})
 
-	lifecycle.Append(fx.Hook{
+	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
+			logger.Infof("Starting %s server at: h: %s, p: %d, ssl: %t", name, httpConfig.Host, httpConfig.Port, httpConfig.SSL.Enabled)
 			go func() {
 				if err := server.Start(g); err != nil {
 					logger.Fatalf("Failed to start server: %s", err)
@@ -386,8 +420,7 @@ func createGinFunctionFromHandlerFn[REQUEST, RESPONSE any](
 		}
 
 		var r RESPONSE
-		v := reflect.ValueOf(&response.Body)
-		if response == nil || v.Elem().IsZero() {
+		if response == nil || reflect.ValueOf(&response.Body).Elem().IsZero() {
 			if reflect.TypeOf(r) != nil && reflect.TypeOf(r).String() == "server.Void" {
 				statusCode := http.StatusNoContent
 				c.Writer.WriteHeader(statusCode)
