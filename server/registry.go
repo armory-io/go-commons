@@ -204,7 +204,7 @@ func newHandlerRegistry(
 					return nil, fmt.Errorf("failed to register hander for [Path: %s, Method: %s, Produces: %s] there was already a registered handler", hDTO.Path, hDTO.Method, hDTO.Produces)
 				}
 
-				hDTO.HandlerFn = h.GetHigherOrderHandlerFunc(logger, requestValidator, hDTO)
+				hDTO.HandlerFn = h.GetGinHandlerFn(logger, requestValidator, hDTO)
 				registryData[key][hDTO.Produces] = hDTO
 			}
 		}

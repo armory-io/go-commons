@@ -71,7 +71,7 @@ type (
 	//
 	// 	func (c *ClusterController) Handlers() []server.Handler {
 	// 		return []server.Handler{
-	// 			server.NewRequestResponseHandler(c.createClusterHandler, server.HandlerConfig{
+	// 			server.NewHandler(c.createClusterHandler, server.HandlerConfig{
 	// 				Method: http.MethodPost,
 	// 			}),
 	// 		}
@@ -128,19 +128,6 @@ type (
 
 	// Void an empty struct that can be used as a placeholder for requests/responses that do not have a body
 	Void struct{}
-
-	// RequestDetails use server.GetRequestDetailsFromContext to get this out of the request context
-	RequestDetails struct {
-		// Headers the headers sent along with the request
-		Headers http.Header
-		// QueryParameters the decoded well-formed query params from the request
-		// always a non-nil map containing all the valid query parameters found
-		QueryParameters map[string][]string
-		// PathParameters The map of path parameters if specified in the request configuration
-		// ex: path: if the path was defined as "/customer/:id" and the request was for "/customer/foo"
-		// PathParameters["id"] would equal "foo"
-		PathParameters map[string]string
-	}
 
 	// Response The response wrapper for a handler response to be return to the client of the request
 	// StatusCode If set then it takes precedence to the default status code for the handler.
@@ -336,8 +323,22 @@ func authorizeRequest(ctx context.Context, h *handlerDTO) Error {
 	return nil
 }
 
+// RequestDetails use server.GetRequestDetailsFromContext to get this out of the request context
+type RequestDetails struct {
+	// Headers the headers sent along with the request
+	Headers http.Header
+	// QueryParameters the decoded well-formed query params from the request
+	// always a non-nil map containing all the valid query parameters found
+	QueryParameters map[string][]string
+	// PathParameters The map of path parameters if specified in the request configuration
+	// ex: path: if the path was defined as "/customer/:id" and the request was for "/customer/foo"
+	// PathParameters["id"] would equal "foo"
+	PathParameters map[string]string
+}
+
 type requestDetailsKey struct{}
 
+// GetRequestDetailsFromContext fetches the server.RequestDetails from the context
 func GetRequestDetailsFromContext(ctx context.Context) (*RequestDetails, error) {
 	v, ok := ctx.Value(requestDetailsKey{}).(RequestDetails)
 	if !ok {

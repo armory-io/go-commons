@@ -52,12 +52,12 @@ type Indicator struct {
 
 func (c *HealthController) Handlers() []server.Handler {
 	return []server.Handler{
-		server.NewRequestResponseHandler(c.readinessCheckHandler, server.HandlerConfig{
+		server.NewHandler(c.readinessCheckHandler, server.HandlerConfig{
 			Path:       "/health/readiness",
 			Method:     http.MethodGet,
 			AuthOptOut: true,
 		}),
-		server.NewRequestResponseHandler(c.livenessCheckHandler, server.HandlerConfig{
+		server.NewHandler(c.livenessCheckHandler, server.HandlerConfig{
 			Path:       "/health/liveness",
 			Method:     http.MethodGet,
 			AuthOptOut: true,

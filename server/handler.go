@@ -10,10 +10,10 @@ import (
 
 type (
 	// Handler The handler interface
-	// Instances of this interface should only ever be created by NewRequestResponseHandler, which happens automatically during server initialization
+	// Instances of this interface should only ever be created by NewHandler, which happens automatically during server initialization
 	// The expected way that handlers are created is by creating a provider that provides an instance of Controller
 	Handler interface {
-		GetHigherOrderHandlerFunc(log *zap.SugaredLogger, v *validator.Validate, handler *handlerDTO) gin.HandlerFunc
+		GetGinHandlerFn(log *zap.SugaredLogger, v *validator.Validate, handler *handlerDTO) gin.HandlerFunc
 		Config() HandlerConfig
 	}
 
@@ -53,11 +53,12 @@ func (r *handler[REQUEST, RESPONSE]) Config() HandlerConfig {
 	return r.config
 }
 
-func (r *handler[REQUEST, RESPONSE]) GetHigherOrderHandlerFunc(log *zap.SugaredLogger, requestValidator *validator.Validate, config *handlerDTO) gin.HandlerFunc {
+func (r *handler[REQUEST, RESPONSE]) GetGinHandlerFn(log *zap.SugaredLogger, requestValidator *validator.Validate, config *handlerDTO) gin.HandlerFunc {
 	return createGinFunctionFromHandlerFn(r.handleFunc, config, requestValidator, log)
 }
 
-func NewRequestResponseHandler[REQUEST, RESPONSE any](f func(ctx context.Context, request REQUEST) (*Response[RESPONSE], Error), config HandlerConfig) Handler {
+// NewHandler creates a Handler from a handler function and server.HandlerConfig
+func NewHandler[REQUEST, RESPONSE any](f func(ctx context.Context, request REQUEST) (*Response[RESPONSE], Error), config HandlerConfig) Handler {
 	return &handler[REQUEST, RESPONSE]{
 		config:     config,
 		handleFunc: f,
