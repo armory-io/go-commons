@@ -4,29 +4,161 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	armoryhttp "github.com/armory-io/go-commons/http"
 	"github.com/armory-io/go-commons/iam"
 	"github.com/armory-io/go-commons/metadata"
 	"github.com/armory-io/go-commons/metrics"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"github.com/google/uuid"
-	"github.com/mitchellh/mapstructure"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
-	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 	"io"
 	"net/http"
 	"reflect"
-	"strings"
 )
 
-var sensitiveHeaderNamesInLowerCase = []string{
-	"authorization",
-	"x-armory-proxied-authorization",
+type (
+	// IController baseController the base IController interface, all controllers must impl this via providing an instance of Controller or ManagementController
+	IController interface {
+		Handlers() []Handler
+	}
+
+	// IControllerPrefix an IController can implement this interface to have all of its handler func paths prefixed with a common path partial
+	IControllerPrefix interface {
+		Prefix() string
+	}
+
+	// IControllerAuthZValidator an IController can implement this interface to apply a common AuthZ validator to all exported handlers
+	IControllerAuthZValidator interface {
+		AuthZValidator(p *iam.ArmoryCloudPrincipal) (string, bool)
+	}
+
+	// Controller the expected way of defining endpoint collections for an Armory application
+	// See the bellow example and IController, IControllerPrefix, IControllerAuthZValidator for options
+	//
+	// EX:
+	// 	package controllers
+	//
+	// 	import (
+	// 		"context"
+	// 		"github.com/armory-io/go-commons/server"
+	// 		"github.com/armory-io/sccp/internal/sccp/k8s"
+	// 		"go.uber.org/zap"
+	// 		"net/http"
+	// 	)
+	//
+	// 	type ClusterController struct {
+	// 		log *zap.SugaredLogger
+	// 		k8s *k8s.Service
+	// 	}
+	//
+	// 	func NewClusterController(
+	// 		log *zap.SugaredLogger,
+	// 		k8sService *k8s.Service,
+	// 	) server.Controller {
+	// 		return server.Controller{
+	// 			Controller: &ClusterController{
+	// 				log: log,
+	// 				k8s: k8sService,
+	// 			},
+	// 		}
+	// 	}
+	//
+	// 	func (c *ClusterController) Prefix() string {
+	// 		return "/clusters"
+	// 	}
+	//
+	// 	func (c *ClusterController) Handlers() []server.Handler {
+	// 		return []server.Handler{
+	// 			server.NewRequestResponseHandler(c.createClusterHandler, server.HandlerConfig{
+	// 				Method: http.MethodPost,
+	// 			}),
+	// 		}
+	// 	}
+	//
+	// 	type (
+	// 		createClusterRequest struct {
+	// 			AgentIdentifier string `json:"agentIdentifier" validate:"required,min=3,max=255"`
+	// 			ClientId        string `json:"clientId" validate:"required"`
+	// 			ClientSecret    string `json:"clientSecret" validate:"required"`
+	// 		}
+	// 		createClusterResponse struct {
+	// 			ClusterId string `json:"clusterId"`
+	// 		}
+	// 	)
+	//
+	// 	func (c *ClusterController) createClusterHandler(
+	// 		_ context.Context,
+	// 		req createClusterRequest,
+	// 	) (*server.Response[createClusterResponse], server.Response) {
+	// 		id, err := c.k8s.CreateCluster(req.AgentIdentifier, req.ClientId, req.ClientSecret)
+	//
+	// 		if err != nil {
+	// 			return nil, server.NewErrorResponseFromApiError(server.APIError{
+	// 				Message: "Failed to create sandbox cluster",
+	// 			}, server.WithCause(err))
+	// 		}
+	//
+	// 		return server.SimpleResponse(createClusterResponse{
+	// 			ClusterId: id,
+	// 		}), nil
+	// 	}
+	Controller struct {
+		fx.Out
+		Controller IController `group:"server"`
+	}
+
+	controllers struct {
+		fx.In
+		Controllers []IController `group:"server"`
+	}
+
+	// ManagementController the same as Controller but the controllers in this group can be optionally configured
+	// to run on a separate port than the server controllers
+	ManagementController struct {
+		fx.Out
+		Controller IController `group:"management"`
+	}
+
+	managementControllers struct {
+		fx.In
+		Controllers []IController `group:"management"`
+	}
+
+	// Void an empty struct that can be used as a placeholder for requests/responses that do not have a body
+	Void struct{}
+
+	// RequestDetails use server.GetRequestDetailsFromContext to get this out of the request context
+	RequestDetails struct {
+		// Headers the headers sent along with the request
+		Headers http.Header
+		// QueryParameters the decoded well-formed query params from the request
+		// always a non-nil map containing all the valid query parameters found
+		QueryParameters map[string][]string
+		// PathParameters The map of path parameters if specified in the request configuration
+		// ex: path: if the path was defined as "/customer/:id" and the request was for "/customer/foo"
+		// PathParameters["id"] would equal "foo"
+		PathParameters map[string]string
+	}
+
+	// Response The response wrapper for a handler response to be return to the client of the request
+	// StatusCode If set then it takes precedence to the default status code for the handler.
+	// Headers Any values set here will be added to the response sent to the client, if Content-Type is set here then
+	// 	it will override the value set in HandlerConfig.Produces
+	Response[T any] struct {
+		StatusCode int
+		Headers    map[string][]string
+		Body       T
+	}
+)
+
+// SimpleResponse a convenience function for wrapping a body in a response struct with defaults
+// Use this if you do not need to supply custom headers or override the handlers default status code
+func SimpleResponse[T any](body T) *Response[T] {
+	return &Response[T]{
+		Body: body,
+	}
 }
 
 func ConfigureAndStartHttpServer(
@@ -84,17 +216,6 @@ func ConfigureAndStartHttpServer(
 	return nil
 }
 
-func NewRequestResponseHandler[REQUEST, RESPONSE any](f func(ctx context.Context, request REQUEST) (*Response[RESPONSE], Error), config HandlerConfig) Handler {
-	return &handler[REQUEST, RESPONSE]{
-		config:     config,
-		handleFunc: f,
-	}
-}
-
-func (r *handler[REQUEST, RESPONSE]) GetHigherOrderHandlerFunc(log *zap.SugaredLogger, requestValidator *validator.Validate, config *handlerDTO) gin.HandlerFunc {
-	return createHigherOrderHandlerFunc(r.handleFunc, config, requestValidator, log)
-}
-
 func writeResponse(contentType string, body any, w gin.ResponseWriter) Error {
 	w.Header().Set("Content-Type", contentType)
 	switch contentType {
@@ -130,10 +251,6 @@ func writeResponse(contentType string, body any, w gin.ResponseWriter) Error {
 	}
 }
 
-func (r *handler[REQUEST, RESPONSE]) Config() HandlerConfig {
-	return r.config
-}
-
 func validateRequestBody[T any](req T, v *validator.Validate) Error {
 	err := v.Struct(req)
 	if err != nil {
@@ -162,115 +279,6 @@ func validateRequestBody[T any](req T, v *validator.Validate) Error {
 	return nil
 }
 
-// writeAndLogApiErrorThenAbort a helper function that will take a Response and ensure that it is logged and a properly
-// formatted response is returned to the requester
-func writeAndLogApiErrorThenAbort(apiErr Error, c *gin.Context, log *zap.SugaredLogger) {
-	errorID := uuid.NewString()
-	statusCode := http.StatusInternalServerError
-	if c := apiErr.Errors()[0].HttpStatusCode; c != 0 {
-		statusCode = c
-	}
-	writeErrorResponse(c.Writer, apiErr, statusCode, errorID, log)
-	logAPIError(c, errorID, apiErr, statusCode, log)
-	c.Abort()
-}
-
-func logAPIError(
-	c *gin.Context,
-	errorID string,
-	apiErr Error,
-	statusCode int,
-	log *zap.SugaredLogger,
-) {
-	// Configure the base log fields
-	fields := []any{
-		"method", c.Request.Method,
-		"errorID", errorID,
-		"statusCode", statusCode,
-	}
-
-	// Add request headers to the logging details
-	var sb strings.Builder
-	for i, hKey := range maps.Keys(c.Request.Header) {
-		value := "[MASKED]"
-		if !slices.Contains(sensitiveHeaderNamesInLowerCase, strings.ToLower(hKey)) {
-			value = strings.Join(c.Request.Header[hKey], ",")
-		}
-		sb.WriteString(fmt.Sprintf("%s=%s", hKey, value))
-		if i+1 < len(c.Request.Header) {
-			sb.WriteString(",")
-		}
-	}
-	hVal := sb.String()
-	if hVal != "" {
-		fields = append(fields, "headers", hVal)
-	}
-
-	// Add the full request uri, which will include query params to logging fields
-	fields = append(fields, "uri", c.Request.RequestURI)
-
-	// If enabled add the stacktrace to the logging details
-	b := apiErr.StackTraceLoggingBehavior()
-	switch b {
-	case DeferToDefaultBehavior:
-		// By default, 4xx should *not* log stack trace. Everything else should.
-		if statusCode < 400 || statusCode >= 500 {
-			fields = append(fields, "stacktrace", apiErr.Stacktrace())
-		}
-		break
-	case ForceNoStackTrace:
-		break
-	case ForceStackTrace:
-		fields = append(fields, "stacktrace", apiErr.Stacktrace())
-		break
-	}
-
-	if apiErr.Origin() != "" {
-		fields = append(fields, "origin", apiErr.Origin())
-	}
-
-	// Add metadata about the request principal if present to the logging fields
-	principal, _ := iam.ExtractPrincipalFromContext(c.Request.Context())
-	if principal != nil {
-		fields = append(fields, "tenant", principal.Tenant())
-		fields = append(fields, "principal-name", principal.Name)
-		fields = append(fields, "principal-type", principal.Type)
-	}
-
-	// If a cause was supplied add it to the logging fields
-	if apiErr.Cause() != nil {
-		fields = append(fields, "error", apiErr.Cause().Error())
-	}
-
-	// Add any extra details to the logging fields
-	for _, extraDetails := range apiErr.ExtraDetailsForLogging() {
-		fields = append(fields, extraDetails.Key, extraDetails.Value)
-	}
-
-	// Set the message
-	msg := "Could not handle request"
-	if apiErr.Message() != "" {
-		msg = apiErr.Message()
-	}
-
-	// Log it, full send!
-	log.With(fields...).Error(msg)
-}
-
-func writeErrorResponse(writer gin.ResponseWriter, apiErr Error, statusCode int, errorID string, log *zap.SugaredLogger) {
-	writer.Header().Set("content-type", "application/json")
-
-	for _, header := range apiErr.ExtraResponseHeaders() {
-		writer.Header().Add(header.Key, header.Value)
-	}
-
-	writer.WriteHeader(statusCode)
-	err := json.NewEncoder(writer).Encode(apiErr.ToErrorResponseContract(errorID))
-	if err != nil {
-		log.Errorf("Failed to write error response: %s", err)
-	}
-}
-
 func authorizeRequest(ctx context.Context, h *handlerDTO) Error {
 	// If the handler has not opted out of AuthN/AuthZ, extract the principal
 	principal, err := iam.ExtractPrincipalFromContext(ctx)
@@ -292,41 +300,6 @@ func authorizeRequest(ctx context.Context, h *handlerDTO) Error {
 	}
 
 	return nil
-}
-
-func decodeInto[T any](vars map[string]any, ptr *T) error {
-	ptrType := reflect.TypeOf(*ptr)
-
-	if ptrType.Kind() == reflect.Struct {
-		if err := mapstructure.WeakDecode(vars, ptr); err != nil {
-			return err
-		}
-		return nil
-	} else if ptrType.Kind() == reflect.String {
-		if len(vars) == 1 {
-			for _, value := range vars {
-				if err := mapstructure.WeakDecode(value, ptr); err != nil {
-					return err
-				}
-				return nil
-			}
-		}
-		return nil
-	}
-	return fmt.Errorf("internal error: could not match request with Handler, unexpected Handler type")
-}
-
-func extract(c *gin.Context) map[string]any {
-	extracted := make(map[string]any)
-
-	for _, param := range c.Params {
-		extracted[param.Key] = param.Value
-	}
-
-	for key, value := range c.Request.URL.Query() {
-		extracted[key] = value[0]
-	}
-	return extracted
 }
 
 type requestDetailsKey struct{}
@@ -410,6 +383,25 @@ func createHigherOrderHandlerFunc[REQUEST, RESPONSE any](
 		if apiError != nil {
 			writeAndLogApiErrorThenAbort(apiError, c, logger)
 			return
+		}
+
+		var r RESPONSE
+		v := reflect.ValueOf(&response.Body)
+		if response == nil || v.Elem().IsZero() {
+			if reflect.TypeOf(r) != nil && reflect.TypeOf(r).String() == "server.Void" {
+				statusCode := http.StatusNoContent
+				c.Writer.WriteHeader(statusCode)
+				return
+			} else {
+				writeAndLogApiErrorThenAbort(NewErrorResponseFromApiError(
+					APIError{
+						Message: "Internal Server Error",
+					},
+					WithErrorMessage("The handler returned a nil response or nil response.Body but the response type was not server.Void, your handler should return *server.Response[server.Void] if you want to have no response body, else you must return a non nil response object."),
+					WithStackTraceLoggingBehavior(ForceNoStackTrace),
+				), c, logger)
+				return
+			}
 		}
 
 		statusCode := http.StatusOK

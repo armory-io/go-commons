@@ -19,7 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package server
+// Package stacktrace
+// Port of the stack trace logic from zap logger so that we can add stacktraces and origins to API Errors
+package stacktrace
 
 import (
 	"runtime"
@@ -54,26 +56,26 @@ type stacktrace struct {
 type stacktraceDepth int
 
 const (
-	// stacktraceFirst captures only the first frame.
-	stacktraceFirst stacktraceDepth = iota
+	// First captures only the first frame.
+	First stacktraceDepth = iota
 
-	// stacktraceFull captures the entire call stack, allocating more
+	// Full captures the entire call stack, allocating more
 	// storage for it if needed.
-	stacktraceFull
+	Full
 )
 
-// captureStacktrace captures a stack trace of the specified depth, skipping
+// Capture captures a stack trace of the specified depth, skipping
 // the provided number of frames. skip=0 identifies the origin of
 // captureStacktrace.
 //
 // The origin must call Free on the returned stacktrace after using it.
-func captureStacktrace(skip int, depth stacktraceDepth) *stacktrace {
+func Capture(skip int, depth stacktraceDepth) *stacktrace {
 	stack := _stacktracePool.Get().(*stacktrace)
 
 	switch depth {
-	case stacktraceFirst:
+	case First:
 		stack.pcs = stack.storage[:1]
-	case stacktraceFull:
+	case Full:
 		stack.pcs = stack.storage
 	}
 
@@ -87,7 +89,7 @@ func captureStacktrace(skip int, depth stacktraceDepth) *stacktrace {
 	// runtime.Callers truncates the recorded stacktrace if there is no
 	// room in the provided slice. For the full stack trace, keep expanding
 	// storage until there are fewer frames than there is room.
-	if depth == stacktraceFull {
+	if depth == Full {
 		pcs := stack.pcs
 		for numFrames == len(pcs) {
 			pcs = make([]uintptr, len(pcs)*2)
@@ -129,18 +131,18 @@ func (st *stacktrace) Next() (_ runtime.Frame, more bool) {
 
 var (
 	_pool = buffer.NewPool()
-	// get retrieves a buffer from the pool, creating one if necessary.
-	get = _pool.Get
+	// Get retrieves a buffer from the pool, creating one if necessary.
+	Get = _pool.Get
 )
 
-func takeStacktrace(skip int) string {
-	stack := captureStacktrace(skip+1, stacktraceFull)
+func CaptureAsString(skip int) string {
+	stack := Capture(skip+1, Full)
 	defer stack.Free()
 
-	buffer := get()
+	buffer := Get()
 	defer buffer.Free()
 
-	stackfmt := newStackFormatter(buffer)
+	stackfmt := NewStackFormatter(buffer)
 	stackfmt.FormatStack(stack)
 	return buffer.String()
 }
@@ -148,11 +150,11 @@ func takeStacktrace(skip int) string {
 // stackFormatter formats a stack trace into a readable string representation.
 type stackFormatter struct {
 	b        *buffer.Buffer
-	nonEmpty bool // whehther we've written at least one frame already
+	nonEmpty bool // whether we've written at least one frame already
 }
 
-// newStackFormatter builds a new stackFormatter.
-func newStackFormatter(b *buffer.Buffer) stackFormatter {
+// NewStackFormatter builds a new stackFormatter.
+func NewStackFormatter(b *buffer.Buffer) stackFormatter {
 	return stackFormatter{b: b}
 }
 

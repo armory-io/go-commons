@@ -1,11 +1,27 @@
 package server
 
 import (
+	"encoding/json"
+	"fmt"
+	"github.com/armory-io/go-commons/iam"
+	"github.com/armory-io/go-commons/stacktrace"
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
+	"net/http"
 	"strconv"
+	"strings"
 )
 
 const defaultErrorCode = 42
+
+var sensitiveHeaderNamesInLowerCase = []string{
+	"authorization",
+	"x-armory-proxied-authorization",
+}
 
 // ResponseContract the strongly typed error contract that will be returned to the client if a request is not successful
 type ResponseContract struct {
@@ -212,12 +228,12 @@ func NewErrorResponseFromApiError(error APIError, opts ...Option) Error {
 func NewErrorResponseFromApiErrors(errors []APIError, opts ...Option) Error {
 	// get the stacktrace and caller for the error, so it can be logged
 	// Ported from zap
-	stack := captureStacktrace(2, stacktraceFull)
+	stack := stacktrace.Capture(2, stacktrace.Full)
 	defer stack.Free()
-	stackBuffer := get()
+	stackBuffer := stacktrace.Get()
 	defer stackBuffer.Free()
 	origin := ""
-	stacktrace := ""
+	trace := ""
 	if stack.Count() != 0 {
 		frame, more := stack.Next()
 
@@ -229,19 +245,19 @@ func NewErrorResponseFromApiErrors(errors []APIError, opts ...Option) Error {
 			Function: frame.Function,
 		}
 		origin = caller.TrimmedPath()
-		stackfmt := newStackFormatter(stackBuffer)
+		stackfmt := stacktrace.NewStackFormatter(stackBuffer)
 		// We've already extracted the first frame, so format that
 		// separately and defer to stackfmt for the rest.
 		stackfmt.FormatFrame(frame)
 		if more {
 			stackfmt.FormatStack(stack)
 		}
-		stacktrace = stackBuffer.String()
+		trace = stackBuffer.String()
 	}
 
 	aec := &apiErrorResponse{
 		stackTraceLoggingBehavior: DeferToDefaultBehavior,
-		stacktrace:                stacktrace,
+		stacktrace:                trace,
 		errors:                    errors,
 		origin:                    origin,
 	}
@@ -250,4 +266,113 @@ func NewErrorResponseFromApiErrors(errors []APIError, opts ...Option) Error {
 	}
 
 	return aec
+}
+
+// writeAndLogApiErrorThenAbort a helper function that will take a Response and ensure that it is logged and a properly
+// formatted response is returned to the requester
+func writeAndLogApiErrorThenAbort(apiErr Error, c *gin.Context, log *zap.SugaredLogger) {
+	errorID := uuid.NewString()
+	statusCode := http.StatusInternalServerError
+	if c := apiErr.Errors()[0].HttpStatusCode; c != 0 {
+		statusCode = c
+	}
+	writeErrorResponse(c.Writer, apiErr, statusCode, errorID, log)
+	logAPIError(c, errorID, apiErr, statusCode, log)
+	c.Abort()
+}
+
+func logAPIError(
+	c *gin.Context,
+	errorID string,
+	apiErr Error,
+	statusCode int,
+	log *zap.SugaredLogger,
+) {
+	// Configure the base log fields
+	fields := []any{
+		"method", c.Request.Method,
+		"errorID", errorID,
+		"statusCode", statusCode,
+	}
+
+	// Add request headers to the logging details
+	var sb strings.Builder
+	for i, hKey := range maps.Keys(c.Request.Header) {
+		value := "[MASKED]"
+		if !slices.Contains(sensitiveHeaderNamesInLowerCase, strings.ToLower(hKey)) {
+			value = strings.Join(c.Request.Header[hKey], ",")
+		}
+		sb.WriteString(fmt.Sprintf("%s=%s", hKey, value))
+		if i+1 < len(c.Request.Header) {
+			sb.WriteString(",")
+		}
+	}
+	hVal := sb.String()
+	if hVal != "" {
+		fields = append(fields, "headers", hVal)
+	}
+
+	// Add the full request uri, which will include query params to logging fields
+	fields = append(fields, "uri", c.Request.RequestURI)
+
+	// If enabled add the stacktrace to the logging details
+	b := apiErr.StackTraceLoggingBehavior()
+	switch b {
+	case DeferToDefaultBehavior:
+		// By default, 4xx should *not* log stack trace. Everything else should.
+		if statusCode < 400 || statusCode >= 500 {
+			fields = append(fields, "stacktrace", apiErr.Stacktrace())
+		}
+		break
+	case ForceNoStackTrace:
+		break
+	case ForceStackTrace:
+		fields = append(fields, "stacktrace", apiErr.Stacktrace())
+		break
+	}
+
+	if apiErr.Origin() != "" {
+		fields = append(fields, "origin", apiErr.Origin())
+	}
+
+	// Add metadata about the request principal if present to the logging fields
+	principal, _ := iam.ExtractPrincipalFromContext(c.Request.Context())
+	if principal != nil {
+		fields = append(fields, "tenant", principal.Tenant())
+		fields = append(fields, "principal-name", principal.Name)
+		fields = append(fields, "principal-type", principal.Type)
+	}
+
+	// If a cause was supplied add it to the logging fields
+	if apiErr.Cause() != nil {
+		fields = append(fields, "error", apiErr.Cause().Error())
+	}
+
+	// Add any extra details to the logging fields
+	for _, extraDetails := range apiErr.ExtraDetailsForLogging() {
+		fields = append(fields, extraDetails.Key, extraDetails.Value)
+	}
+
+	// Set the message
+	msg := "Could not handle request"
+	if apiErr.Message() != "" {
+		msg = apiErr.Message()
+	}
+
+	// Log it, full send!
+	log.With(fields...).Error(msg)
+}
+
+func writeErrorResponse(writer gin.ResponseWriter, apiErr Error, statusCode int, errorID string, log *zap.SugaredLogger) {
+	writer.Header().Set("content-type", "application/json")
+
+	for _, header := range apiErr.ExtraResponseHeaders() {
+		writer.Header().Add(header.Key, header.Value)
+	}
+
+	writer.WriteHeader(statusCode)
+	err := json.NewEncoder(writer).Encode(apiErr.ToErrorResponseContract(errorID))
+	if err != nil {
+		log.Errorf("Failed to write error response: %s", err)
+	}
 }
