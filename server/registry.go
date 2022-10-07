@@ -92,6 +92,9 @@ func createMultiMimeTypeFn(handlersByMimeType map[string]*handlerDTO, logger *za
 	})
 	return func(c *gin.Context) {
 		accept := c.Request.Header.Get("Accept")
+		if accept == "" {
+			accept = "*/*"
+		}
 
 		// TODO add params to context
 		mt, _, err := contenttype.GetAcceptableMediaTypeFromHeader(accept, available)
