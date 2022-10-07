@@ -6,11 +6,9 @@ import (
 	"errors"
 	armoryhttp "github.com/armory-io/go-commons/http"
 	"github.com/armory-io/go-commons/iam"
-	"github.com/armory-io/go-commons/metadata"
 	"github.com/armory-io/go-commons/metrics"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"io"
@@ -156,7 +154,6 @@ func ConfigureAndStartHttpServer(
 	serverControllers controllers,
 	managementControllers managementControllers,
 	ps *iam.ArmoryCloudPrincipalService,
-	md metadata.ApplicationMetadata,
 ) error {
 	gin.SetMode(gin.ReleaseMode)
 
@@ -164,18 +161,18 @@ func ConfigureAndStartHttpServer(
 		var controllers []IController
 		controllers = append(controllers, serverControllers.Controllers...)
 		controllers = append(controllers, managementControllers.Controllers...)
-		err := configureServer("http + management", lc, config.HTTP, ps, logger, ms, md, controllers...)
+		err := configureServer("http + management", lc, config.HTTP, ps, logger, ms, controllers...)
 		if err != nil {
 			return err
 		}
 		return nil
 	}
 
-	err := configureServer("http", lc, config.HTTP, ps, logger, ms, md, serverControllers.Controllers...)
+	err := configureServer("http", lc, config.HTTP, ps, logger, ms, serverControllers.Controllers...)
 	if err != nil {
 		return err
 	}
-	err = configureServer("management", lc, config.Management, ps, logger, ms, md, managementControllers.Controllers...)
+	err = configureServer("management", lc, config.Management, ps, logger, ms, managementControllers.Controllers...)
 	if err != nil {
 		return err
 	}
@@ -189,15 +186,12 @@ func configureServer(
 	ps *iam.ArmoryCloudPrincipalService,
 	logger *zap.SugaredLogger,
 	ms *metrics.Metrics,
-	md metadata.ApplicationMetadata,
 	controllers ...IController,
 ) error {
 	g := gin.New()
 
 	// Metrics
 	g.Use(metrics.GinHTTPMiddleware(ms))
-	// Dist Tracing
-	g.Use(otelgin.Middleware(md.Name))
 
 	requestValidator := validator.New()
 

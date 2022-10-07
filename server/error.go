@@ -233,7 +233,7 @@ func NewErrorResponseFromApiErrors(errors []APIError, opts ...Option) Error {
 	stackBuffer := stacktrace.Get()
 	defer stackBuffer.Free()
 	origin := ""
-	trace := ""
+	sTrace := ""
 	if stack.Count() != 0 {
 		frame, more := stack.Next()
 
@@ -252,12 +252,12 @@ func NewErrorResponseFromApiErrors(errors []APIError, opts ...Option) Error {
 		if more {
 			stackfmt.FormatStack(stack)
 		}
-		trace = stackBuffer.String()
+		sTrace = stackBuffer.String()
 	}
 
 	aec := &apiErrorResponse{
 		stackTraceLoggingBehavior: DeferToDefaultBehavior,
-		stacktrace:                trace,
+		stacktrace:                sTrace,
 		errors:                    errors,
 		origin:                    origin,
 	}
