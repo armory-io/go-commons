@@ -38,7 +38,7 @@ type Configuration struct {
 	Database mysql.Configuration
 }
 
-var Module = fx.Module("armory-application",
+var Module = fx.Options(
 	logging.Module,
 	metadata.Module,
 	server.Module,

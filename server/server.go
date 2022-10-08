@@ -283,7 +283,10 @@ func validateRequestBody[T any](req T, v *validator.Validate) Error {
 					HttpStatusCode: http.StatusBadRequest,
 				})
 			}
-			return NewErrorResponseFromApiErrors(errors)
+			return NewErrorResponseFromApiErrors(errors,
+				WithErrorMessage("Failed to validate request body"),
+				WithCause(vErr),
+			)
 		}
 
 		return NewErrorResponseFromApiError(APIError{

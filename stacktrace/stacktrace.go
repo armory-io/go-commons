@@ -24,6 +24,7 @@
 package stacktrace
 
 import (
+	"github.com/armory-io/go-commons/bufferpool"
 	"runtime"
 	"sync"
 
@@ -129,17 +130,11 @@ func (st *stacktrace) Next() (_ runtime.Frame, more bool) {
 	return st.frames.Next()
 }
 
-var (
-	_pool = buffer.NewPool()
-	// Get retrieves a buffer from the pool, creating one if necessary.
-	Get = _pool.Get
-)
-
 func CaptureAsString(skip int) string {
 	stack := Capture(skip+1, Full)
 	defer stack.Free()
 
-	buffer := Get()
+	buffer := bufferpool.Get()
 	defer buffer.Free()
 
 	stackfmt := NewStackFormatter(buffer)

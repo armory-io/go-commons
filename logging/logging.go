@@ -19,7 +19,9 @@ package logging
 import (
 	"github.com/armory-io/go-commons/metadata"
 	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"strings"
 )
 
@@ -31,39 +33,55 @@ const (
 	hostname        = "hostname"
 )
 
-func ArmoryLoggerProvider(appMd metadata.ApplicationMetadata) (*zap.SugaredLogger, error) {
+func ArmoryLoggerProvider(appMd metadata.ApplicationMetadata) (*zap.Logger, error) {
 	var logger *zap.Logger
-
-	var baseLogFields []zap.Field
-	baseLogFields = appendFieldIfPresent(applicationName, appMd.Name, baseLogFields)
-	baseLogFields = appendFieldIfPresent(environment, appMd.Environment, baseLogFields)
-	baseLogFields = appendFieldIfPresent(replicaSet, appMd.Replicaset, baseLogFields)
-	baseLogFields = appendFieldIfPresent(hostname, appMd.Hostname, baseLogFields)
-	baseLogFields = appendFieldIfPresent(version, appMd.Version, baseLogFields)
 
 	loggerOptions := []zap.Option{
 		zap.WithCaller(true),
-		zap.Fields(baseLogFields...),
 		// our internal error handling will add stack traces intelligently.
 		zap.AddStacktrace(zap.DPanicLevel),
 	}
 
 	switch strings.ToLower(appMd.Environment) {
 	case "production", "prod", "staging", "stage":
+		var baseLogFields []zap.Field
+		baseLogFields = appendFieldIfPresent(applicationName, appMd.Name, baseLogFields)
+		baseLogFields = appendFieldIfPresent(environment, appMd.Environment, baseLogFields)
+		baseLogFields = appendFieldIfPresent(replicaSet, appMd.Replicaset, baseLogFields)
+		baseLogFields = appendFieldIfPresent(hostname, appMd.Hostname, baseLogFields)
+		baseLogFields = appendFieldIfPresent(version, appMd.Version, baseLogFields)
+
+		loggerOptions = append(loggerOptions, zap.Fields(baseLogFields...))
+
 		l, err := zap.NewProductionConfig().Build(loggerOptions...)
 		if err != nil {
 			return nil, err
 		}
 		logger = l
 	default:
-		l, err := zap.NewDevelopment(loggerOptions...)
+		sink, closeOut, err := zap.Open("stderr")
 		if err != nil {
 			return nil, err
 		}
-		logger = l
+		errSink, _, err := zap.Open("stderr")
+		if err != nil {
+			closeOut()
+			return nil, err
+		}
+
+		loggerOptions = append(loggerOptions,
+			zap.ErrorOutput(errSink),
+			zap.Development(),
+			zap.AddCaller(),
+		)
+
+		logger = zap.New(
+			zapcore.NewCore(NewArmoryDevConsoleEncoder(), sink, zap.NewAtomicLevelAt(zap.InfoLevel)),
+			loggerOptions...,
+		)
 	}
 
-	return logger.Sugar(), nil
+	return logger, nil
 }
 
 func appendFieldIfPresent(key string, value string, fields []zap.Field) []zap.Field {
@@ -75,4 +93,10 @@ func appendFieldIfPresent(key string, value string, fields []zap.Field) []zap.Fi
 
 var Module = fx.Options(
 	fx.Provide(ArmoryLoggerProvider),
+	fx.Provide(func(log *zap.Logger) *zap.SugaredLogger {
+		return log.Sugar()
+	}),
+	fx.WithLogger(func(logger *zap.Logger) fxevent.Logger {
+		return &fxevent.ZapLogger{Logger: logger}
+	}),
 )

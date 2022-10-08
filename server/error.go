@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/armory-io/go-commons/bufferpool"
 	"github.com/armory-io/go-commons/iam"
 	"github.com/armory-io/go-commons/stacktrace"
 	"github.com/gin-gonic/gin"
@@ -230,7 +231,7 @@ func NewErrorResponseFromApiErrors(errors []APIError, opts ...Option) Error {
 	// Ported from zap
 	stack := stacktrace.Capture(2, stacktrace.Full)
 	defer stack.Free()
-	stackBuffer := stacktrace.Get()
+	stackBuffer := bufferpool.Get()
 	defer stackBuffer.Free()
 	origin := ""
 	sTrace := ""
@@ -244,7 +245,7 @@ func NewErrorResponseFromApiErrors(errors []APIError, opts ...Option) Error {
 			Line:     frame.Line,
 			Function: frame.Function,
 		}
-		origin = caller.TrimmedPath()
+		origin = caller.FullPath()
 		stackfmt := stacktrace.NewStackFormatter(stackBuffer)
 		// We've already extracted the first frame, so format that
 		// separately and defer to stackfmt for the rest.
@@ -277,12 +278,12 @@ func writeAndLogApiErrorThenAbort(apiErr Error, c *gin.Context, log *zap.Sugared
 		statusCode = c
 	}
 	writeErrorResponse(c.Writer, apiErr, statusCode, errorID, log)
-	logAPIError(c, errorID, apiErr, statusCode, log)
+	LogAPIError(c.Request, errorID, apiErr, statusCode, log)
 	c.Abort()
 }
 
-func logAPIError(
-	c *gin.Context,
+func LogAPIError(
+	request *http.Request,
 	errorID string,
 	apiErr Error,
 	statusCode int,
@@ -290,20 +291,20 @@ func logAPIError(
 ) {
 	// Configure the base log fields
 	fields := []any{
-		"method", c.Request.Method,
+		"method", request.Method,
 		"errorID", errorID,
 		"statusCode", statusCode,
 	}
 
 	// Add request headers to the logging details
 	var sb strings.Builder
-	for i, hKey := range maps.Keys(c.Request.Header) {
+	for i, hKey := range maps.Keys(request.Header) {
 		value := "[MASKED]"
 		if !slices.Contains(sensitiveHeaderNamesInLowerCase, strings.ToLower(hKey)) {
-			value = strings.Join(c.Request.Header[hKey], ",")
+			value = strings.Join(request.Header[hKey], ",")
 		}
 		sb.WriteString(fmt.Sprintf("%s=%s", hKey, value))
-		if i+1 < len(c.Request.Header) {
+		if i+1 < len(request.Header) {
 			sb.WriteString(",")
 		}
 	}
@@ -313,7 +314,7 @@ func logAPIError(
 	}
 
 	// Add the full request uri, which will include query params to logging fields
-	fields = append(fields, "uri", c.Request.RequestURI)
+	fields = append(fields, "uri", request.RequestURI)
 
 	// If enabled add the stacktrace to the logging details
 	b := apiErr.StackTraceLoggingBehavior()
@@ -332,11 +333,11 @@ func logAPIError(
 	}
 
 	if apiErr.Origin() != "" {
-		fields = append(fields, "origin", apiErr.Origin())
+		fields = append(fields, "src", apiErr.Origin())
 	}
 
 	// Add metadata about the request principal if present to the logging fields
-	principal, _ := iam.ExtractPrincipalFromContext(c.Request.Context())
+	principal, _ := iam.ExtractPrincipalFromContext(request.Context())
 	if principal != nil {
 		fields = append(fields, "tenant", principal.Tenant())
 		fields = append(fields, "principal-name", principal.Name)
@@ -345,7 +346,7 @@ func logAPIError(
 
 	// If a cause was supplied add it to the logging fields
 	if apiErr.Cause() != nil {
-		fields = append(fields, "error", apiErr.Cause().Error())
+		fields = append(fields, "error", apiErr.Cause())
 	}
 
 	// Add any extra details to the logging fields
