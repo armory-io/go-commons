@@ -3,6 +3,7 @@ package management
 import (
 	"context"
 	"github.com/armory-io/go-commons/server"
+	"github.com/armory-io/go-commons/server/serr"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"net/http"
@@ -65,7 +66,7 @@ func (c *HealthController) Handlers() []server.Handler {
 	}
 }
 
-func (c *HealthController) readinessCheckHandler(_ context.Context, _ server.Void) (*server.Response[HealthCheckResponse], server.Error) {
+func (c *HealthController) readinessCheckHandler(_ context.Context, _ server.Void) (*server.Response[HealthCheckResponse], serr.Error) {
 	statusCode := http.StatusServiceUnavailable
 	status := "unavailable"
 	isReady := true
@@ -95,7 +96,7 @@ func (c *HealthController) readinessCheckHandler(_ context.Context, _ server.Voi
 	}, nil
 }
 
-func (c *HealthController) livenessCheckHandler(_ context.Context, _ server.Void) (*server.Response[HealthCheckResponse], server.Error) {
+func (c *HealthController) livenessCheckHandler(_ context.Context, _ server.Void) (*server.Response[HealthCheckResponse], serr.Error) {
 	statusCode := http.StatusServiceUnavailable
 	status := "unavailable"
 	isAlive := true

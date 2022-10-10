@@ -22,6 +22,7 @@ import (
 	"go.uber.org/fx/fxevent"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"os"
 	"strings"
 )
 
@@ -76,8 +77,13 @@ func ArmoryLoggerProvider(appMd metadata.ApplicationMetadata) (*zap.Logger, erro
 			zap.AddCaller(),
 		)
 
+		disableColors := false
+		if os.Getenv("DISABLE_COLORS") == "true" {
+			disableColors = true
+		}
+
 		logger = zap.New(
-			zapcore.NewCore(NewArmoryDevConsoleEncoder(false), sink, zap.NewAtomicLevelAt(zap.InfoLevel)),
+			zapcore.NewCore(NewArmoryDevConsoleEncoder(disableColors), sink, zap.NewAtomicLevelAt(zap.InfoLevel)),
 			loggerOptions...,
 		)
 	}

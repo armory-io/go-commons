@@ -1,29 +1,15 @@
-package server
+// Package serr This package contains all the logic and helper methods for creating and serializing API Errors
+// This is in a separate package than server so that as a developer you get better intellisense when creating errors
+package serr
 
 import (
-	"encoding/json"
-	"fmt"
 	"github.com/armory-io/go-commons/bufferpool"
-	"github.com/armory-io/go-commons/iam"
 	"github.com/armory-io/go-commons/stacktrace"
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
-	"net/http"
 	"strconv"
-	"strings"
 )
 
 const defaultErrorCode = 42
-
-var sensitiveHeaderNamesInLowerCase = []string{
-	"authorization",
-	"x-armory-proxied-authorization",
-}
 
 // ResponseContract the strongly typed error contract that will be returned to the client if a request is not successful
 type ResponseContract struct {
@@ -96,15 +82,43 @@ type apiErrorResponse struct {
 }
 
 // Error
-// You'll want to create an instance using the NewErrorResponseFromApiError or NewErrorResponseFromApiErrors. e.g.
+// You'll want to create an instance using one of the New* functions in this package such as NewSimpleError, NewErrorResponseFromApiError, etc. e.g.
 //
-//	NewErrorResponseFromApiError(someError,
-//		withErrorMessage("super useful message")
-//	)
+//	// A simple use case
+//	serr.NewSimpleError("super useful message", someErrThatIsTheCauseThatWillBeLogged)
 //
-//	NewErrorResponseFromApiErrors(
-//		[]error.APIError{someError,otherError},
-//		withErrorMessage("super useful message")
+//	// A simple use case, where there isn't a cause
+//	serr.NewSimpleError("super useful message", nil)
+//
+//	// A simple use case, where you want to override the default status code of 500
+//	serr.NewSimpleErrorWithStatusCode("could not find the thing", http.StatusNotFound, nil)
+//
+//	// The kitchen sink
+//	serr.NewErrorResponseFromApiError(serr.APIError{
+//		Message: "Server can not produce requested content type",
+//		Metadata: map[string]any{
+//			"requested": accept,
+//			"available": strings.Join(availableMimeTypes, ", "),
+//		},
+//		HttpStatusCode: http.StatusBadRequest,
+//	},
+//		serr.WithErrorMessage("Some extra message for the logs, that replaces the default, can't handle request message"),
+//		serr.WithCause(err),
+//		serr.WithExtraDetailsForLogging(
+//			serr.KVPair{
+//				Key:   "requested-type",
+//				Value: accept,
+//			},
+//			serr.KVPair{
+//				Key:   "available-types",
+//				Value: strings.Join(availableMimeTypes, ", "),
+//			},
+//		))
+//		serr.WithExtraResponseHeaders(serr.KVPair{
+//			Key:   "X-Armory-Custom-header",
+//			Value: "custom header value",
+//		})
+//		serr.WithStackTraceLoggingBehavior(serr.ForceStackTrace) // tweak the stacktrace behavior
 //	)
 //
 // The generator functions accept many Option's that directly affect the response and what is logged, so take a close look at the available options.
@@ -270,127 +284,21 @@ func NewErrorResponseFromApiErrors(errors []APIError, opts ...Option) Error {
 	return aec
 }
 
-// writeAndLogApiErrorThenAbort a helper function that will take a Response and ensure that it is logged and a properly
-// formatted response is returned to the requester
-// TODO context first
-func writeAndLogApiErrorThenAbort(apiErr Error, c *gin.Context, log *zap.SugaredLogger) {
-	errorID := uuid.NewString()
-	statusCode := http.StatusInternalServerError
-	if c := apiErr.Errors()[0].HttpStatusCode; c != 0 {
-		statusCode = c
-	}
-
-	span := trace.SpanFromContext(c.Request.Context())
-	traceId := span.SpanContext().TraceID().String()
-	spanId := span.SpanContext().SpanID().String()
-
-	writeErrorResponse(c.Writer, apiErr, statusCode, errorID, log)
-	LogAPIError(c.Request, errorID, apiErr, statusCode, traceId, spanId, log)
-	c.Abort()
+// NewSimpleError is a helper function that will create a serr.Error that satisfies most use cases.
+//
+// Defaults to http.StatusInternalServerError (500) status code.
+//
+// Use serr.NewSimpleErrorWithStatusCode to override the status code.
+func NewSimpleError(msgForResponse string, cause error) Error {
+	return NewErrorResponseFromApiError(APIError{
+		Message: msgForResponse,
+	}, WithCause(cause))
 }
 
-func LogAPIError(
-	request *http.Request,
-	errorID string,
-	apiErr Error,
-	statusCode int,
-	traceId string,
-	spanId string,
-	log *zap.SugaredLogger,
-) {
-	// Configure the base log fields
-	fields := []any{
-		"method", request.Method,
-		"errorID", errorID,
-		"statusCode", statusCode,
-	}
-
-	if traceId != "" {
-		fields = append(fields, "traceId", traceId)
-	}
-
-	if spanId != "" {
-		fields = append(fields, "spanId", spanId)
-	}
-
-	// Add request headers to the logging details
-	var sb strings.Builder
-	for i, hKey := range maps.Keys(request.Header) {
-		value := "[MASKED]"
-		if !slices.Contains(sensitiveHeaderNamesInLowerCase, strings.ToLower(hKey)) {
-			value = strings.Join(request.Header[hKey], ",")
-		}
-		sb.WriteString(fmt.Sprintf("%s=%s", hKey, value))
-		if i+1 < len(request.Header) {
-			sb.WriteString(",")
-		}
-	}
-	hVal := sb.String()
-	if hVal != "" {
-		fields = append(fields, "headers", hVal)
-	}
-
-	// Add the full request uri, which will include query params to logging fields
-	fields = append(fields, "uri", request.RequestURI)
-
-	// If enabled add the stacktrace to the logging details
-	b := apiErr.StackTraceLoggingBehavior()
-	switch b {
-	case DeferToDefaultBehavior:
-		// By default, 4xx should *not* log stack trace. Everything else should.
-		if statusCode < 400 || statusCode >= 500 {
-			fields = append(fields, "stacktrace", apiErr.Stacktrace())
-		}
-		break
-	case ForceNoStackTrace:
-		break
-	case ForceStackTrace:
-		fields = append(fields, "stacktrace", apiErr.Stacktrace())
-		break
-	}
-
-	if apiErr.Origin() != "" {
-		fields = append(fields, "src", apiErr.Origin())
-	}
-
-	// Add metadata about the request principal if present to the logging fields
-	principal, _ := iam.ExtractPrincipalFromContext(request.Context())
-	if principal != nil {
-		fields = append(fields, "tenant", principal.Tenant())
-		fields = append(fields, "principal-name", principal.Name)
-		fields = append(fields, "principal-type", principal.Type)
-	}
-
-	// If a cause was supplied add it to the logging fields
-	if apiErr.Cause() != nil {
-		fields = append(fields, "error", apiErr.Cause())
-	}
-
-	// Add any extra details to the logging fields
-	for _, extraDetails := range apiErr.ExtraDetailsForLogging() {
-		fields = append(fields, extraDetails.Key, extraDetails.Value)
-	}
-
-	// Set the message
-	msg := "Could not handle request"
-	if apiErr.Message() != "" {
-		msg = apiErr.Message()
-	}
-
-	// Log it, full send!
-	log.With(fields...).Error(msg)
-}
-
-func writeErrorResponse(writer gin.ResponseWriter, apiErr Error, statusCode int, errorID string, log *zap.SugaredLogger) {
-	writer.Header().Set("content-type", "application/json")
-
-	for _, header := range apiErr.ExtraResponseHeaders() {
-		writer.Header().Add(header.Key, header.Value)
-	}
-
-	writer.WriteHeader(statusCode)
-	err := json.NewEncoder(writer).Encode(apiErr.ToErrorResponseContract(errorID))
-	if err != nil {
-		log.Errorf("Failed to write error response: %s", err)
-	}
+// NewSimpleErrorWithStatusCode is a helper function that will create a serr.Error that satisfies most use cases
+func NewSimpleErrorWithStatusCode(msgForResponse string, statusCodeForResponse int, cause error) Error {
+	return NewErrorResponseFromApiError(APIError{
+		Message:        msgForResponse,
+		HttpStatusCode: statusCodeForResponse,
+	}, WithCause(cause))
 }

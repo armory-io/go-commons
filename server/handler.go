@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"github.com/armory-io/go-commons/iam"
+	"github.com/armory-io/go-commons/server/serr"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/zap"
@@ -45,7 +46,7 @@ type (
 
 	handler[T, U any] struct {
 		config     HandlerConfig
-		handleFunc func(ctx context.Context, request T) (*Response[U], Error)
+		handleFunc func(ctx context.Context, request T) (*Response[U], serr.Error)
 	}
 )
 
@@ -58,7 +59,7 @@ func (r *handler[REQUEST, RESPONSE]) GetGinHandlerFn(log *zap.SugaredLogger, req
 }
 
 // NewHandler creates a Handler from a handler function and server.HandlerConfig
-func NewHandler[REQUEST, RESPONSE any](f func(ctx context.Context, request REQUEST) (*Response[RESPONSE], Error), config HandlerConfig) Handler {
+func NewHandler[REQUEST, RESPONSE any](f func(ctx context.Context, request REQUEST) (*Response[RESPONSE], serr.Error), config HandlerConfig) Handler {
 	return &handler[REQUEST, RESPONSE]{
 		config:     config,
 		handleFunc: f,

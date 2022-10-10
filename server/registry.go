@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"github.com/armory-io/go-commons/server/serr"
 	"github.com/elnormous/contenttype"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -103,7 +104,7 @@ func createMultiMimeTypeFn(handlersByMimeType map[string]*handlerDTO, logger *za
 				return m.String()
 			})
 			writeAndLogApiErrorThenAbort(
-				NewErrorResponseFromApiError(APIError{
+				serr.NewErrorResponseFromApiError(serr.APIError{
 					Message: "Server can not produce requested content type",
 					Metadata: map[string]any{
 						"requested": accept,
@@ -111,13 +112,13 @@ func createMultiMimeTypeFn(handlersByMimeType map[string]*handlerDTO, logger *za
 					},
 					HttpStatusCode: http.StatusBadRequest,
 				},
-					WithCause(err),
-					WithExtraDetailsForLogging(
-						KVPair{
+					serr.WithCause(err),
+					serr.WithExtraDetailsForLogging(
+						serr.KVPair{
 							Key:   "requested-type",
 							Value: accept,
 						},
-						KVPair{
+						serr.KVPair{
 							Key:   "available-types",
 							Value: strings.Join(availableMimeTypes, ", "),
 						},
