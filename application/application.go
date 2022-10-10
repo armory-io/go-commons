@@ -17,6 +17,7 @@
 package application
 
 import (
+	"github.com/armory-io/go-commons/gin"
 	armoryhttp "github.com/armory-io/go-commons/http"
 	"github.com/armory-io/go-commons/iam"
 	"github.com/armory-io/go-commons/logging"
@@ -38,7 +39,18 @@ type Configuration struct {
 	Database mysql.Configuration
 }
 
-var Module = fx.Options(
+// Module the main application module that bootstraps common armory microservice services
+// Deprecated: see ModuleV2
+var Module = fx.Module("armory-application",
+	logging.Module,
+	metadata.Module,
+	fx.Provide(metrics.New),
+	fx.Provide(iam.New),
+	fx.Provide(gin.NewGinServer),
+)
+
+// ModuleV2 the main application module that bootstraps common armory microservice services
+var ModuleV2 = fx.Options(
 	logging.Module,
 	metadata.Module,
 	server.Module,
