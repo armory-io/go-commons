@@ -58,6 +58,7 @@ func ArmoryLoggerProvider(appMd metadata.ApplicationMetadata) (*zap.Logger, erro
 			return nil, err
 		}
 		logger = l
+		break
 	default:
 		sink, closeOut, err := zap.Open("stderr")
 		if err != nil {
@@ -76,7 +77,7 @@ func ArmoryLoggerProvider(appMd metadata.ApplicationMetadata) (*zap.Logger, erro
 		)
 
 		logger = zap.New(
-			zapcore.NewCore(NewArmoryDevConsoleEncoder(), sink, zap.NewAtomicLevelAt(zap.InfoLevel)),
+			zapcore.NewCore(NewArmoryDevConsoleEncoder(false), sink, zap.NewAtomicLevelAt(zap.InfoLevel)),
 			loggerOptions...,
 		)
 	}

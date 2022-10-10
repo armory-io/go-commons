@@ -15,9 +15,12 @@ import (
 	"time"
 )
 
-// NewArmoryDevConsoleEncoder encoder that produces colored human readable output
+// NewArmoryDevConsoleEncoder encoder that produces colored human-readable output
 // Not suitable for production use, see: zapcore.MapObjectEncoder comments.
-func NewArmoryDevConsoleEncoder() zapcore.Encoder {
+func NewArmoryDevConsoleEncoder(disableColor bool) zapcore.Encoder {
+	if disableColor {
+		color.NoColor = true
+	}
 	return &consoleEncoder{
 		m: zapcore.NewMapObjectEncoder(),
 	}
@@ -143,9 +146,13 @@ const (
 )
 
 var reg = regexp.MustCompile(`(\s+)(.*)(/.*?\.go:\d+)`)
+var faint = color.New(color.Faint)
 
 func (c *consoleEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (*buffer.Buffer, error) {
-	line := bufferpool.Get()
+	out := bufferpool.Get()
+
+	out.AppendString(faint.Sprintf(ent.Time.Local().Format("01/02 03:04:05pm")))
+	out.AppendString(tab)
 
 	lC := color.New(color.FgHiWhite)
 	switch ent.Level {
@@ -162,64 +169,69 @@ func (c *consoleEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) 
 		lC = color.New(color.FgHiRed, color.Bold)
 		break
 	}
-	line.AppendByte(newline)
-	line.AppendString(color.YellowString("lvl: "))
-	line.AppendString(lC.Sprintf(ent.Level.CapitalString()))
+	out.AppendString(lC.Sprintf(ent.Level.CapitalString()))
 
-	line.AppendByte(newline)
-	line.AppendString(color.YellowString("msg: "))
-	line.AppendString(ent.Message)
+	if ent.LoggerName != "" {
+		out.AppendString(tab)
+		out.AppendByte('[')
+		out.AppendString(ent.LoggerName)
+		out.AppendByte(']')
+	}
 
-	src, stack, err := c.writeContext(line, fields)
+	var src string
+	if c.m.Fields["src"] != nil {
+		src = c.m.Fields["src"].(string)
+	}
+	if ent.Caller.Defined || src != "" {
+		out.AppendString(tab)
+		if src != "" {
+			out.AppendString(color.New(color.FgBlue, color.Bold, color.Underline).Sprintf(src))
+		} else {
+			out.AppendString(color.New(color.FgBlue, color.Bold, color.Underline).Sprintf(ent.Caller.TrimmedPath()))
+		}
+	}
+
+	mC := color.New()
+	switch ent.Level {
+	case zapcore.DebugLevel:
+		mC = color.New(color.FgHiGreen)
+		break
+	case zapcore.WarnLevel:
+		mC = color.New(color.FgHiYellow)
+		break
+	case zapcore.ErrorLevel, zapcore.DPanicLevel, zapcore.PanicLevel, zapcore.FatalLevel:
+		mC = color.New(color.FgHiRed)
+		break
+	}
+	out.AppendString(tab)
+	out.AppendString(mC.Sprintf(ent.Message))
+
+	stack, err := c.writeContext(out, fields)
 	if stack != "" {
 		ent.Stack = stack
 	}
 
-	line.AppendByte(newline)
-	line.AppendString(color.YellowString("dtm: "))
-	line.AppendString(ent.Time.Local().Format("Jan 02 2006 03:04:05.00pm"))
-
-	if ent.Caller.Defined || src != "" {
-		line.AppendByte(newline)
-		line.AppendString(color.YellowString("src: "))
-		if src != "" {
-			line.AppendString(color.New(color.FgBlue, color.Bold, color.Underline).Sprintf(src))
-		} else {
-			line.AppendString(color.New(color.FgBlue, color.Bold, color.Underline).Sprintf(ent.Caller.FullPath()))
-		}
-		line.AppendString(tab)
-	}
-
 	if err != "" {
-		line.AppendByte(newline)
-		line.AppendString(color.YellowString("err: "))
-		line.AppendString(color.New(color.FgHiRed, color.Bold).Sprintf(err))
-	}
-
-	if ent.LoggerName != "" {
-		line.AppendByte(newline)
-		line.AppendString(color.YellowString("lgr: "))
-		line.AppendString(ent.LoggerName)
-		line.AppendString(tab)
+		out.AppendByte(newline)
+		out.AppendString("Contributing Error: ")
+		out.AppendString(color.New(color.FgHiRed).Sprintf(err))
+		out.AppendByte(newline)
 	}
 
 	if strings.TrimSpace(ent.Stack) != "" {
-		line.AppendByte(newline)
-		line.AppendString(color.YellowString("stracktrace: "))
-		line.AppendByte(newline)
-		line.AppendString(
+		out.AppendByte(newline)
+		out.AppendString(
 			reg.ReplaceAllString(ent.Stack,
 				fmt.Sprintf("${1}%s", color.BlueString(color.New(color.FgBlue, color.Bold, color.Underline).Sprintf("${2}${3}"))),
 			),
 		)
 	}
+	out.AppendByte(newline)
 
-	line.AppendByte(newline)
-
-	return line, nil
+	return out, nil
 }
 
-func (c *consoleEncoder) writeContext(line *buffer.Buffer, fields []zapcore.Field) (string, string, string) {
+func (c *consoleEncoder) writeContext(line *buffer.Buffer, fields []zapcore.Field) (string, string) {
 	clone := c.Clone().(*consoleEncoder)
 	for _, field := range fields {
 		field.AddTo(clone)
@@ -230,43 +242,48 @@ func (c *consoleEncoder) writeContext(line *buffer.Buffer, fields []zapcore.Fiel
 		return !reflect.ValueOf(&value).Elem().IsZero()
 	})
 
-	var src string
-	if fieldsToLog["src"] != nil {
-		src = fieldsToLog["src"].(string)
-	}
-	delete(fieldsToLog, "src")
-
 	var stack string
 	if fieldsToLog["stacktrace"] != nil {
 		stack = fieldsToLog["stacktrace"].(string)
+		delete(fieldsToLog, "stacktrace")
 	}
-	delete(fieldsToLog, "stacktrace")
+
+	// delete some redundant fields
+	delete(fieldsToLog, "stack")
+	delete(fieldsToLog, "src")
 
 	var err string
 	if fieldsToLog["error"] != nil {
 		err = fieldsToLog["error"].(string)
+		delete(fieldsToLog, "error")
 	}
-	delete(fieldsToLog, "error")
+	if fieldsToLog["errorVerbose"] != nil {
+		err = fieldsToLog["errorVerbose"].(string)
+		delete(fieldsToLog, "errorVerbose")
+	}
 
 	if len(fieldsToLog) == 0 {
-		return src, stack, err
+		return stack, err
 	}
 
-	line.AppendByte(newline)
-	line.AppendString(color.YellowString("ctx: "))
-	line.AppendByte('[')
-	line.AppendByte(newline)
+	line.AppendString(tab)
+	line.AppendString("[ ")
 	keys := maps.Keys(fieldsToLog)
 	sort.Strings(keys)
-	for _, key := range keys {
+	for i, key := range keys {
 		value := fieldsToLog[key]
-		line.AppendString(tab)
 		line.AppendString(color.New(color.FgHiBlue).Sprintf(key))
 		line.AppendString(": ")
+		line.AppendByte('\'')
 		line.AppendString(color.YellowString(fmt.Sprintf("%v", value)))
-		line.AppendByte(newline)
+		line.AppendByte('\'')
+		if i+1 == len(keys) {
+			line.AppendString(" ")
+		} else {
+			line.AppendString(", ")
+		}
 	}
 	line.AppendByte(']')
 
-	return src, stack, err
+	return stack, err
 }

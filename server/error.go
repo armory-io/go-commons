@@ -8,6 +8,7 @@ import (
 	"github.com/armory-io/go-commons/stacktrace"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/exp/maps"
@@ -245,7 +246,7 @@ func NewErrorResponseFromApiErrors(errors []APIError, opts ...Option) Error {
 			Line:     frame.Line,
 			Function: frame.Function,
 		}
-		origin = caller.FullPath()
+		origin = caller.TrimmedPath()
 		stackfmt := stacktrace.NewStackFormatter(stackBuffer)
 		// We've already extracted the first frame, so format that
 		// separately and defer to stackfmt for the rest.
@@ -271,14 +272,20 @@ func NewErrorResponseFromApiErrors(errors []APIError, opts ...Option) Error {
 
 // writeAndLogApiErrorThenAbort a helper function that will take a Response and ensure that it is logged and a properly
 // formatted response is returned to the requester
+// TODO context first
 func writeAndLogApiErrorThenAbort(apiErr Error, c *gin.Context, log *zap.SugaredLogger) {
 	errorID := uuid.NewString()
 	statusCode := http.StatusInternalServerError
 	if c := apiErr.Errors()[0].HttpStatusCode; c != 0 {
 		statusCode = c
 	}
+
+	span := trace.SpanFromContext(c.Request.Context())
+	traceId := span.SpanContext().TraceID().String()
+	spanId := span.SpanContext().SpanID().String()
+
 	writeErrorResponse(c.Writer, apiErr, statusCode, errorID, log)
-	LogAPIError(c.Request, errorID, apiErr, statusCode, log)
+	LogAPIError(c.Request, errorID, apiErr, statusCode, traceId, spanId, log)
 	c.Abort()
 }
 
@@ -287,6 +294,8 @@ func LogAPIError(
 	errorID string,
 	apiErr Error,
 	statusCode int,
+	traceId string,
+	spanId string,
 	log *zap.SugaredLogger,
 ) {
 	// Configure the base log fields
@@ -294,6 +303,14 @@ func LogAPIError(
 		"method", request.Method,
 		"errorID", errorID,
 		"statusCode", statusCode,
+	}
+
+	if traceId != "" {
+		fields = append(fields, "traceId", traceId)
+	}
+
+	if spanId != "" {
+		fields = append(fields, "spanId", spanId)
 	}
 
 	// Add request headers to the logging details
