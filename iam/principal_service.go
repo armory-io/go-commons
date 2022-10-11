@@ -87,8 +87,13 @@ func (a *ArmoryCloudPrincipalService) VerifyPrincipalAndSetContext(tokenOrRawHea
 	if err != nil {
 		return err
 	}
-	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), principalContextKey{}, *p))
+	c.Request = c.Request.WithContext(DangerouslyWriteUnverifiedPrincipalToContext(c, p))
 	return nil
+}
+
+// DangerouslyWriteUnverifiedPrincipalToContext is exposed for easily injecting stub principals into context for testing
+func DangerouslyWriteUnverifiedPrincipalToContext(c *gin.Context, principal *ArmoryCloudPrincipal) context.Context {
+	return context.WithValue(c.Request.Context(), principalContextKey{}, *principal)
 }
 
 func (a *ArmoryCloudPrincipalService) ExtractAndVerifyPrincipalFromTokenString(token string) (*ArmoryCloudPrincipal, error) {

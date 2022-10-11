@@ -35,13 +35,7 @@ const (
 )
 
 func ArmoryLoggerProvider(appMd metadata.ApplicationMetadata) (*zap.Logger, error) {
-	var logger *zap.Logger
-
-	loggerOptions := []zap.Option{
-		zap.WithCaller(true),
-		// our internal error handling will add stack traces intelligently.
-		zap.AddStacktrace(zap.DPanicLevel),
-	}
+	loggerOptions := armoryStdLogOpt()
 
 	switch strings.ToLower(appMd.Environment) {
 	case "production", "prod", "staging", "stage":
@@ -54,41 +48,50 @@ func ArmoryLoggerProvider(appMd metadata.ApplicationMetadata) (*zap.Logger, erro
 
 		loggerOptions = append(loggerOptions, zap.Fields(baseLogFields...))
 
-		l, err := zap.NewProductionConfig().Build(loggerOptions...)
-		if err != nil {
-			return nil, err
-		}
-		logger = l
-		break
+		return zap.NewProductionConfig().Build(loggerOptions...)
 	default:
-		sink, closeOut, err := zap.Open("stderr")
-		if err != nil {
-			return nil, err
-		}
-		errSink, _, err := zap.Open("stderr")
-		if err != nil {
-			closeOut()
-			return nil, err
-		}
+		return createArmoryDevLogger(loggerOptions, zapcore.InfoLevel)
+	}
+}
 
-		loggerOptions = append(loggerOptions,
-			zap.ErrorOutput(errSink),
-			zap.Development(),
-			zap.AddCaller(),
-		)
+func armoryStdLogOpt() []zap.Option {
+	return []zap.Option{
+		zap.WithCaller(true),
+		// our internal error handling will add stack traces intelligently.
+		zap.AddStacktrace(zap.DPanicLevel),
+	}
+}
 
-		disableColors := false
-		if os.Getenv("DISABLE_COLORS") == "true" {
-			disableColors = true
-		}
+func StdArmoryDevLogger(level zapcore.Level) (*zap.Logger, error) {
+	return createArmoryDevLogger(armoryStdLogOpt(), level)
+}
 
-		logger = zap.New(
-			zapcore.NewCore(NewArmoryDevConsoleEncoder(disableColors), sink, zap.NewAtomicLevelAt(zap.InfoLevel)),
-			loggerOptions...,
-		)
+func createArmoryDevLogger(loggerOptions []zap.Option, level zapcore.Level) (*zap.Logger, error) {
+	sink, closeOut, err := zap.Open("stderr")
+	if err != nil {
+		return nil, err
+	}
+	errSink, _, err := zap.Open("stderr")
+	if err != nil {
+		closeOut()
+		return nil, err
 	}
 
-	return logger, nil
+	loggerOptions = append(loggerOptions,
+		zap.ErrorOutput(errSink),
+		zap.Development(),
+		zap.AddCaller(),
+	)
+
+	disableColors := false
+	if os.Getenv("DISABLE_COLORS") == "true" {
+		disableColors = true
+	}
+
+	return zap.New(
+		zapcore.NewCore(NewArmoryDevConsoleEncoder(disableColors), sink, zap.NewAtomicLevelAt(level)),
+		loggerOptions...,
+	), nil
 }
 
 func appendFieldIfPresent(key string, value string, fields []zap.Field) []zap.Field {

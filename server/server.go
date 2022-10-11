@@ -227,7 +227,7 @@ func configureServer(
 
 	// Optionally enable request logging
 	if requestLoggingConfig.Enabled {
-		g.Use(requestLogger(logger, requestLoggingConfig.BlockList))
+		g.Use(requestLogger(logger, requestLoggingConfig))
 	}
 
 	requestValidator := validator.New()
@@ -308,9 +308,9 @@ func validateRequestBody[T any](req T, v *validator.Validate) serr.Error {
 	if err != nil {
 		vErr, ok := err.(validator.ValidationErrors)
 		if ok {
-			var errors []serr.APIError
+			var errs []serr.APIError
 			for _, err := range vErr {
-				errors = append(errors, serr.APIError{
+				errs = append(errs, serr.APIError{
 					Message: err.Error(),
 					Metadata: map[string]any{
 						"key":   err.Namespace(),
@@ -320,7 +320,7 @@ func validateRequestBody[T any](req T, v *validator.Validate) serr.Error {
 					HttpStatusCode: http.StatusBadRequest,
 				})
 			}
-			return serr.NewErrorResponseFromApiErrors(errors,
+			return serr.NewErrorResponseFromApiErrors(errs,
 				serr.WithErrorMessage("Failed to validate request body"),
 				serr.WithCause(vErr),
 			)
@@ -334,23 +334,28 @@ func validateRequestBody[T any](req T, v *validator.Validate) serr.Error {
 	return nil
 }
 
+var (
+	invalidCredentialsError = serr.APIError{
+		Message:        "Invalid Credentials",
+		HttpStatusCode: http.StatusUnauthorized,
+	}
+	principalNotAuthorized = serr.APIError{
+		Message:        "Principal Not Authorized",
+		HttpStatusCode: http.StatusForbidden,
+	}
+)
+
 func authorizeRequest(ctx context.Context, h *handlerDTO) serr.Error {
 	// If the handler has not opted out of AuthN/AuthZ, extract the principal
 	principal, err := iam.ExtractPrincipalFromContext(ctx)
 	if err != nil {
-		return serr.NewErrorResponseFromApiError(serr.APIError{
-			Message:        "Invalid Credentials",
-			HttpStatusCode: http.StatusUnauthorized,
-		}, serr.WithCause(err))
+		return serr.NewErrorResponseFromApiError(invalidCredentialsError, serr.WithCause(err))
 	}
 
 	for _, authZValidator := range h.AuthZValidators {
 		// If the handler has provided an AuthZ Validation Function, execute it.
 		if msg, authorized := authZValidator(principal); !authorized {
-			return serr.NewErrorResponseFromApiError(serr.APIError{
-				Message:        "Principal Not Authorized",
-				HttpStatusCode: http.StatusForbidden,
-			}, serr.WithErrorMessage(msg))
+			return serr.NewErrorResponseFromApiError(principalNotAuthorized, serr.WithErrorMessage(msg))
 		}
 	}
 
@@ -381,8 +386,31 @@ func GetRequestDetailsFromContext(ctx context.Context) (*RequestDetails, error) 
 	return &v, nil
 }
 
-// createGinFunctionFromHandlerFn creates a higher order gin handler function, that wraps the IController handler function with a function that deals with the common request/response logic
-func createGinFunctionFromHandlerFn[REQUEST, RESPONSE any](
+var (
+	errBodyRequired = serr.APIError{
+		Message:        "Failed to read request",
+		HttpStatusCode: http.StatusBadRequest,
+	}
+	errFailedToUnmarshalRequest = serr.APIError{
+		Message:        "Failed to unmarshal request",
+		HttpStatusCode: http.StatusBadRequest,
+	}
+	errFailedToReadRequest = serr.APIError{
+		Message:        "Failed to read request",
+		HttpStatusCode: http.StatusBadRequest,
+	}
+	errMethodNotAllowed = serr.APIError{
+		Message:        "Method Not Allowed",
+		HttpStatusCode: http.StatusMethodNotAllowed,
+	}
+	errServerFailedToProduceExpectedResponse = serr.APIError{
+		Message:        "Failed to Produce Response Body",
+		HttpStatusCode: http.StatusInternalServerError,
+	}
+)
+
+// ginHOF creates Higher Order gin Handler Function, that wraps the IController handler function with a function that deals with the common request/response logic
+func ginHOF[REQUEST, RESPONSE any](
 	handlerFn func(ctx context.Context, request REQUEST) (*Response[RESPONSE], serr.Error),
 	handler *handlerDTO,
 	requestValidator *validator.Validate,
@@ -391,7 +419,8 @@ func createGinFunctionFromHandlerFn[REQUEST, RESPONSE any](
 	return func(c *gin.Context) {
 		if !handler.AuthOptOut {
 			if err := authorizeRequest(c.Request.Context(), handler); err != nil {
-				writeAndLogApiErrorThenAbort(err, c, logger)
+				writeAndLogApiErrorThenAbort(c, err, logger)
+				return
 			}
 		}
 
@@ -409,65 +438,57 @@ func createGinFunctionFromHandlerFn[REQUEST, RESPONSE any](
 
 		var response *Response[RESPONSE]
 		var apiError serr.Error
-		switch handler.Method {
+		switch c.Request.Method {
 		case http.MethodGet, http.MethodDelete:
 			var req REQUEST
 			response, apiError = handlerFn(c.Request.Context(), req)
 			break
 		case http.MethodPost, http.MethodPut, http.MethodPatch:
-			b, err := io.ReadAll(c.Request.Body)
-			if err != nil {
-				apiError = serr.NewErrorResponseFromApiError(serr.APIError{
-					Message:        "Failed to read request",
-					HttpStatusCode: http.StatusBadRequest,
-				}, serr.WithCause(err))
-				break
-			}
-
-			// TODO what if the handler doesn't need a body/object
-			// handle null body
 			var req REQUEST
-			if err := json.Unmarshal(b, &req); err != nil {
-				apiError = serr.NewErrorResponseFromApiError(serr.APIError{
-					Message:        "Failed to unmarshal request",
-					HttpStatusCode: http.StatusBadRequest,
-				}, serr.WithCause(err))
-				break
-			}
+			if reflect.TypeOf(req) != nil && reflect.TypeOf(req).String() != "server.Void" {
+				if c.Request.Body == nil {
+					apiError = serr.NewErrorResponseFromApiError(errBodyRequired)
+					break
+				}
+				b, err := io.ReadAll(c.Request.Body)
+				if err != nil {
+					apiError = serr.NewErrorResponseFromApiError(errFailedToReadRequest, serr.WithCause(err))
+					break
+				}
+				if err := json.Unmarshal(b, &req); err != nil {
+					apiError = serr.NewErrorResponseFromApiError(errFailedToUnmarshalRequest, serr.WithCause(err))
+					break
+				}
 
-			if apiError = validateRequestBody(req, requestValidator); apiError != nil {
-				break
+				if apiError = validateRequestBody(req, requestValidator); apiError != nil {
+					break
+				}
 			}
 
 			response, apiError = handlerFn(c.Request.Context(), req)
 			break
 		default:
-			apiError = serr.NewErrorResponseFromApiError(serr.APIError{
-				Message:        "Method Not Allowed",
-				HttpStatusCode: http.StatusMethodNotAllowed,
-			})
+			apiError = serr.NewErrorResponseFromApiError(errMethodNotAllowed)
 			break
 		}
 
 		if apiError != nil {
-			writeAndLogApiErrorThenAbort(apiError, c, logger)
+			writeAndLogApiErrorThenAbort(c, apiError, logger)
 			return
 		}
 
 		var r RESPONSE
 		if response == nil || reflect.ValueOf(&response.Body).Elem().IsZero() {
 			if reflect.TypeOf(r) != nil && reflect.TypeOf(r).String() == "server.Void" {
-				statusCode := http.StatusNoContent
-				c.Writer.WriteHeader(statusCode)
+				c.Status(http.StatusNoContent)
+				_, _ = c.Writer.Write([]byte{})
 				return
 			} else {
-				writeAndLogApiErrorThenAbort(serr.NewErrorResponseFromApiError(
-					serr.APIError{
-						Message: "Internal Server Error",
-					},
+				writeAndLogApiErrorThenAbort(c, serr.NewErrorResponseFromApiError(
+					errServerFailedToProduceExpectedResponse,
 					serr.WithErrorMessage("The handler returned a nil response or nil response.Body but the response type was not server.Void, your handler should return *server.Response[server.Void] if you want to have no response body, else you must return a non nil response object."),
 					serr.WithStackTraceLoggingBehavior(serr.ForceNoStackTrace),
-				), c, logger)
+				), logger)
 				return
 			}
 		}
@@ -479,10 +500,17 @@ func createGinFunctionFromHandlerFn[REQUEST, RESPONSE any](
 		if response.StatusCode != 0 {
 			statusCode = response.StatusCode
 		}
-		c.Writer.WriteHeader(statusCode)
+		c.Status(statusCode)
+
+		for header, values := range response.Headers {
+			for _, value := range values {
+				c.Header(header, value)
+			}
+		}
+
 		apiError = writeResponse(handler.Produces, response.Body, c.Writer)
 		if apiError != nil {
-			writeAndLogApiErrorThenAbort(apiError, c, logger)
+			writeAndLogApiErrorThenAbort(c, apiError, logger)
 			return
 		}
 	}
@@ -490,8 +518,7 @@ func createGinFunctionFromHandlerFn[REQUEST, RESPONSE any](
 
 // writeAndLogApiErrorThenAbort a helper function that will take a Response and ensure that it is logged and a properly
 // formatted response is returned to the requester
-// TODO context first
-func writeAndLogApiErrorThenAbort(apiErr serr.Error, c *gin.Context, log *zap.SugaredLogger) {
+func writeAndLogApiErrorThenAbort(c *gin.Context, apiErr serr.Error, log *zap.SugaredLogger) {
 	errorID := uuid.NewString()
 	statusCode := http.StatusInternalServerError
 	if c := apiErr.Errors()[0].HttpStatusCode; c != 0 {
@@ -623,15 +650,38 @@ func writeErrorResponse(writer gin.ResponseWriter, apiErr serr.Error, statusCode
 	}
 }
 
-// requestLogger simple middleware that logs request details if the path isn't on the blocklist
-func requestLogger(log *zap.SugaredLogger, blockList []string) gin.HandlerFunc {
+// requestLogger ia a simple middleware that logs request details if the path isn't on the blocklist and the status range is permitted
+func requestLogger(log *zap.SugaredLogger, config RequestLoggingConfiguration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()
 
-		if !slices.Contains(blockList, c.FullPath()) {
-			log.
-				With(getBaseFields(c.Request, c.Writer.Status())...).
-				Infof("request: %s %s", c.Request.Method, c.FullPath())
+		switch status := c.Writer.Status(); {
+		case status >= 200 && status < 300:
+			if config.Disable2XX {
+				return
+			}
+			break
+		case status >= 300 && status < 400:
+			if config.Disable3XX {
+				return
+			}
+			break
+		case status >= 400 && status < 400:
+			if config.Disable4XX {
+				return
+			}
+			break
+		case status >= 500 && status < 500:
+			if config.Disable5XX {
+				return
+			}
+			break
+		default:
+			if !slices.Contains(config.BlockList, c.FullPath()) {
+				log.
+					With(getBaseFields(c.Request, c.Writer.Status())...).
+					Infof("request: %s %s", c.Request.Method, c.FullPath())
+			}
 		}
 	}
 }

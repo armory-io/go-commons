@@ -66,7 +66,6 @@ type iHandlerRegistry interface {
 }
 
 func (r *handlerRegistry) registerHandlers(in registerHandlersInput) error {
-	// TODO something wierd going on here, where the gin func has the wrong pointer or something
 	for key, handlersByMimeType := range r.data {
 		authOptOut := maps.Values(handlersByMimeType)[0].AuthOptOut
 
@@ -119,28 +118,25 @@ func createMultiMimeTypeFn(handlersByMimeType map[string]*handlerDTO, logger *za
 			availableMimeTypes := lo.Map(available, func(m contenttype.MediaType, _ int) string {
 				return m.String()
 			})
-			writeAndLogApiErrorThenAbort(
-				serr.NewErrorResponseFromApiError(serr.APIError{
-					Message: "Server can not produce requested content type",
-					Metadata: map[string]any{
-						"requested": accept,
-						"available": strings.Join(availableMimeTypes, ", "),
-					},
-					HttpStatusCode: http.StatusBadRequest,
+			writeAndLogApiErrorThenAbort(c, serr.NewErrorResponseFromApiError(serr.APIError{
+				Message: "Server can not produce requested content type",
+				Metadata: map[string]any{
+					"requested": accept,
+					"available": strings.Join(availableMimeTypes, ", "),
 				},
-					serr.WithCause(err),
-					serr.WithExtraDetailsForLogging(
-						serr.KVPair{
-							Key:   "requested-type",
-							Value: accept,
-						},
-						serr.KVPair{
-							Key:   "available-types",
-							Value: strings.Join(availableMimeTypes, ", "),
-						},
-					)),
-				c, logger,
-			)
+				HttpStatusCode: http.StatusBadRequest,
+			},
+				serr.WithCause(err),
+				serr.WithExtraDetailsForLogging(
+					serr.KVPair{
+						Key:   "requested-type",
+						Value: accept,
+					},
+					serr.KVPair{
+						Key:   "available-types",
+						Value: strings.Join(availableMimeTypes, ", "),
+					},
+				)), logger)
 			return
 		}
 

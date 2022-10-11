@@ -31,7 +31,7 @@ func ginAuthMiddleware(ps *iam.ArmoryCloudPrincipalService, log *zap.SugaredLogg
 		if err != nil {
 			apiErr := serr.NewSimpleErrorWithStatusCode(
 				"Failed to extract access token from request", http.StatusUnauthorized, err)
-			writeAndLogApiErrorThenAbort(apiErr, c, log)
+			writeAndLogApiErrorThenAbort(c, apiErr, log)
 			c.Abort()
 			return
 		}
@@ -39,7 +39,7 @@ func ginAuthMiddleware(ps *iam.ArmoryCloudPrincipalService, log *zap.SugaredLogg
 		if err := ps.VerifyPrincipalAndSetContext(auth, c); err != nil {
 			apiErr := serr.NewSimpleErrorWithStatusCode(
 				"Failed to verify principal from access token", http.StatusUnauthorized, err)
-			writeAndLogApiErrorThenAbort(apiErr, c, log)
+			writeAndLogApiErrorThenAbort(c, apiErr, log)
 			c.Abort()
 			return
 		}

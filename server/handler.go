@@ -71,7 +71,7 @@ func (r *handler[REQUEST, RESPONSE]) Config() HandlerConfig {
 }
 
 func (r *handler[REQUEST, RESPONSE]) GetGinHandlerFn(log *zap.SugaredLogger, requestValidator *validator.Validate, config *handlerDTO) gin.HandlerFunc {
-	return createGinFunctionFromHandlerFn(r.handleFunc, config, requestValidator, log)
+	return ginHOF(r.handleFunc, config, requestValidator, log)
 }
 
 // NewHandler creates a Handler from a handler function and server.HandlerConfig

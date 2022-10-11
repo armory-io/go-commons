@@ -24,10 +24,19 @@ type Configuration struct {
 	Management     http.HTTP
 }
 
-// RequestLoggingConfiguration enable request logging
+// RequestLoggingConfiguration enable request logging, by default all requests are logged.
+// See fields for options on filtering what is logged
 type RequestLoggingConfiguration struct {
 	// Enabled if set to true a request logging middleware will be applied to all requests
 	Enabled bool
 	// BlockList configure a set of endpoints to skip request logging on, such as the health check endpoints
 	BlockList []string
+	// Disable2XX if enabled requests inside the 200-299 range will not be logged
+	Disable2XX bool
+	// Disable3XX if enabled requests inside the 300-399 range will not be logged
+	Disable3XX bool
+	// Disable4XX if enabled requests inside the 400-499 range will not be logged
+	Disable4XX bool
+	// Disable5XX if enabled requests inside the 500-599 range will not be logged
+	Disable5XX bool
 }
