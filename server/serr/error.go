@@ -40,7 +40,7 @@ type ResponseContractErrorDTO struct {
 	Code     string         `json:"code"`
 }
 
-// APIError an error that gets embedded in ResponseContract when an error response is return to the client
+// APIError is an error that gets embedded in ResponseContract when an error response is returned to the client
 type APIError struct {
 	// Code The business/project error code this instance represents (not to be confused with the HTTP status code which can be retrieved via HttpStatusCode).
 	// This should never change for a given error so clients can rely on it and write code against it.
