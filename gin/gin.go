@@ -40,6 +40,8 @@ type GinServerParams struct {
 	Allowed [][]string `group:"allow-without-auth"`
 }
 
+// NewGinServer Creates and exports a Gin Server
+// Deprecated: this package will be deleted once Yeti can be ported to use controllers and the Start Sever Hook
 func NewGinServer(
 	lifecycle fx.Lifecycle,
 	config armoryhttp.Configuration,

@@ -25,6 +25,8 @@ import (
 	"strings"
 )
 
+// GinAuthMiddleware
+// Deprecated: this depreciated in favor of using the authn middleware bundled in the server package that returns a serr.Error
 func GinAuthMiddleware(ps *ArmoryCloudPrincipalService, allowWithoutAuthList []string) gin.HandlerFunc {
 
 	allowList := make(map[string]bool)
@@ -36,7 +38,7 @@ func GinAuthMiddleware(ps *ArmoryCloudPrincipalService, allowWithoutAuthList []s
 		if allowList[c.FullPath()] {
 			return
 		}
-		auth, err := extractBearerToken(c.Request)
+		auth, err := ExtractBearerToken(c.Request)
 		if err != nil {
 			ginErrWriter(c, http.StatusUnauthorized, err.Error())
 			return

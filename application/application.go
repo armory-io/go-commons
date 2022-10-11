@@ -21,9 +21,12 @@ import (
 	armoryhttp "github.com/armory-io/go-commons/http"
 	"github.com/armory-io/go-commons/iam"
 	"github.com/armory-io/go-commons/logging"
+	"github.com/armory-io/go-commons/management"
 	"github.com/armory-io/go-commons/metadata"
 	"github.com/armory-io/go-commons/metrics"
 	"github.com/armory-io/go-commons/mysql"
+	"github.com/armory-io/go-commons/server"
+	"github.com/armory-io/go-commons/tracing"
 	"go.uber.org/fx"
 )
 
@@ -37,10 +40,23 @@ type Configuration struct {
 	Database mysql.Configuration
 }
 
-var Module = fx.Module("armory-application",
+// Module the main application module that bootstraps common armory microservice services
+// Deprecated: see ModuleV2
+var Module = fx.Options(
 	logging.Module,
 	metadata.Module,
 	fx.Provide(metrics.New),
 	fx.Provide(iam.New),
 	fx.Provide(gin.NewGinServer),
+)
+
+// ModuleV2 the main application module that bootstraps common armory microservice services
+var ModuleV2 = fx.Options(
+	logging.Module,
+	metadata.Module,
+	server.Module,
+	management.Module,
+	tracing.Module,
+	fx.Provide(metrics.New),
+	fx.Provide(iam.New),
 )

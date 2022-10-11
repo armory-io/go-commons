@@ -35,29 +35,29 @@ const (
 
 type (
 	Configuration struct {
-		HTTP HTTP `yaml:"http"`
+		HTTP HTTP
 	}
 
 	HTTP struct {
-		Host string `yaml:"host"`
-		Port uint32 `yaml:"port"`
-		SSL  SSL    `yaml:"ssl"`
+		Host string
+		Port uint32
+		SSL  SSL
 	}
 
 	SSL struct {
 		// Enable SSL
-		Enabled bool `yaml:"enabled"`
+		Enabled bool
 		// Certificate file, can be just a PEM of cert + key or just the cert in which case you'll also need
 		// to provide the key file
-		CertFile string `yaml:"certFile"`
+		CertFile string
 		// Key file if the cert file doesn't provide it
-		KeyFile string `yaml:"keyFile"`
+		KeyFile string
 		// Key password if the key is encrypted
-		KeyPassword string `yaml:"keyFilePassword"`
+		KeyPassword string
 		// when using mTLS, CA PEM. If not provided, it will default to the certificate of the server as a CA
-		CAcertFile string `yaml:"cacertFile"`
+		CAcertFile string
 		// Client auth requested (none, want, need, any, request)
-		ClientAuth ClientAuthType `yaml:"clientAuth"`
+		ClientAuth ClientAuthType
 	}
 
 	ClientAuthType string

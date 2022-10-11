@@ -25,10 +25,12 @@ import (
 	"strings"
 )
 
+// AuthMiddleware
+// Deprecated: this depreciated in favor of using the authn middleware bundled in the server package that returns a serr.Error
 func AuthMiddleware(ps *ArmoryCloudPrincipalService) func(handler http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			auth, err := extractBearerToken(r)
+			auth, err := ExtractBearerToken(r)
 			if err != nil {
 				errWriter(w, http.StatusUnauthorized, err.Error())
 				return
