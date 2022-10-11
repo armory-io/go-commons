@@ -23,7 +23,6 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/mysql"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	log "github.com/sirupsen/logrus"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"time"
@@ -133,7 +132,7 @@ func (m *Migrator) migrate() error {
 	}
 	err = migrationInstance.Up()
 	if err == migrate.ErrNoChange {
-		log.Infof("No change detected.")
+		m.log.Infof("No change detected.")
 		return nil
 	}
 	return err
