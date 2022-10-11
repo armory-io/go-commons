@@ -19,6 +19,15 @@ package server
 import "github.com/armory-io/go-commons/http"
 
 type Configuration struct {
-	HTTP       http.HTTP
-	Management http.HTTP
+	RequestLogging RequestLoggingConfiguration
+	HTTP           http.HTTP
+	Management     http.HTTP
+}
+
+// RequestLoggingConfiguration enable request logging
+type RequestLoggingConfiguration struct {
+	// Enabled if set to true a request logging middleware will be applied to all requests
+	Enabled bool
+	// BlockList configure a set of endpoints to skip request logging on, such as the health check endpoints
+	BlockList []string
 }

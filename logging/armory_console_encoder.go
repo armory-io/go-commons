@@ -231,7 +231,6 @@ func (c *consoleEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) 
 		out.AppendByte(newline)
 		out.AppendString("Contributing Error: ")
 		out.AppendString(color.New(color.FgHiRed).Sprintf(err))
-		out.AppendByte(newline)
 	}
 
 	if strings.TrimSpace(ent.Stack) != "" {

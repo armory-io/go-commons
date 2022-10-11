@@ -26,6 +26,7 @@ import (
 	"github.com/armory-io/go-commons/metrics"
 	"github.com/armory-io/go-commons/mysql"
 	"github.com/armory-io/go-commons/server"
+	"github.com/armory-io/go-commons/tracing"
 	"go.uber.org/fx"
 )
 
@@ -41,7 +42,7 @@ type Configuration struct {
 
 // Module the main application module that bootstraps common armory microservice services
 // Deprecated: see ModuleV2
-var Module = fx.Module("armory-application",
+var Module = fx.Options(
 	logging.Module,
 	metadata.Module,
 	fx.Provide(metrics.New),
@@ -55,6 +56,7 @@ var ModuleV2 = fx.Options(
 	metadata.Module,
 	server.Module,
 	management.Module,
+	tracing.Module,
 	fx.Provide(metrics.New),
 	fx.Provide(iam.New),
 )

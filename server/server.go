@@ -38,6 +38,7 @@ import (
 	"io"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -187,18 +188,18 @@ func ConfigureAndStartHttpServer(
 		var controllers []IController
 		controllers = append(controllers, serverControllers.Controllers...)
 		controllers = append(controllers, managementControllers.Controllers...)
-		err := configureServer("http + management", lc, config.HTTP, ps, logger, ms, md, controllers...)
+		err := configureServer("http + management", lc, config.HTTP, config.RequestLogging, ps, logger, ms, md, controllers...)
 		if err != nil {
 			return err
 		}
 		return nil
 	}
 
-	err := configureServer("http", lc, config.HTTP, ps, logger, ms, md, serverControllers.Controllers...)
+	err := configureServer("http", lc, config.HTTP, config.RequestLogging, ps, logger, ms, md, serverControllers.Controllers...)
 	if err != nil {
 		return err
 	}
-	err = configureServer("management", lc, config.Management, ps, logger, ms, md, managementControllers.Controllers...)
+	err = configureServer("management", lc, config.Management, config.RequestLogging, ps, logger, ms, md, managementControllers.Controllers...)
 	if err != nil {
 		return err
 	}
@@ -209,6 +210,7 @@ func configureServer(
 	name string,
 	lc fx.Lifecycle,
 	httpConfig armoryhttp.HTTP,
+	requestLoggingConfig RequestLoggingConfiguration,
 	ps *iam.ArmoryCloudPrincipalService,
 	logger *zap.SugaredLogger,
 	ms *metrics.Metrics,
@@ -222,6 +224,11 @@ func configureServer(
 
 	// Metrics
 	g.Use(metrics.GinHTTPMiddleware(ms))
+
+	// Optionally enable request logging
+	if requestLoggingConfig.Enabled {
+		g.Use(requestLogger(logger, requestLoggingConfig.BlockList))
+	}
 
 	requestValidator := validator.New()
 
@@ -491,12 +498,8 @@ func writeAndLogApiErrorThenAbort(apiErr serr.Error, c *gin.Context, log *zap.Su
 		statusCode = c
 	}
 
-	span := trace.SpanFromContext(c.Request.Context())
-	traceId := span.SpanContext().TraceID().String()
-	spanId := span.SpanContext().SpanID().String()
-
 	writeErrorResponse(c.Writer, apiErr, statusCode, errorID, log)
-	LogAPIError(c.Request, errorID, apiErr, statusCode, traceId, spanId, log)
+	LogAPIError(c.Request, errorID, apiErr, statusCode, log)
 	c.Abort()
 }
 
@@ -510,23 +513,60 @@ func LogAPIError(
 	errorID string,
 	apiErr serr.Error,
 	statusCode int,
-	traceId string,
-	spanId string,
 	log *zap.SugaredLogger,
 ) {
+	fields := getBaseFields(request, statusCode)
+
+	fields = append(fields, "errorID", errorID)
+
+	// If enabled add the stacktrace to the logging details
+	b := apiErr.StackTraceLoggingBehavior()
+	switch b {
+	case serr.DeferToDefaultBehavior:
+		// By default, 4xx should *not* log stack trace. Everything else should.
+		if statusCode < 400 || statusCode >= 500 {
+			fields = append(fields, "stacktrace", apiErr.Stacktrace())
+		}
+		break
+	case serr.ForceNoStackTrace:
+		break
+	case serr.ForceStackTrace:
+		fields = append(fields, "stacktrace", apiErr.Stacktrace())
+		break
+	}
+
+	if apiErr.Origin() != "" {
+		fields = append(fields, "src", apiErr.Origin())
+	}
+
+	// If a cause was supplied add it to the logging fields
+	if apiErr.Cause() != nil {
+		fields = append(fields, "error", apiErr.Cause())
+	}
+
+	// Add any extra details to the logging fields
+	for _, extraDetails := range apiErr.ExtraDetailsForLogging() {
+		fields = append(fields, extraDetails.Key, extraDetails.Value)
+	}
+
+	// Set the message
+	msg := "Handler did not process request successfully"
+	if apiErr.Message() != "" {
+		msg = apiErr.Message()
+	}
+
+	// Log it, full send!
+	log.With(fields...).Error(msg)
+}
+
+func getBaseFields(
+	request *http.Request,
+	statusCode int,
+) []any {
 	// Configure the base log fields
 	fields := []any{
 		"method", request.Method,
-		"errorID", errorID,
-		"statusCode", statusCode,
-	}
-
-	if traceId != "" {
-		fields = append(fields, "traceId", traceId)
-	}
-
-	if spanId != "" {
-		fields = append(fields, "spanId", spanId)
+		"status", strconv.Itoa(statusCode),
 	}
 
 	// Add request headers to the logging details
@@ -549,24 +589,14 @@ func LogAPIError(
 	// Add the full request uri, which will include query params to logging fields
 	fields = append(fields, "uri", request.RequestURI)
 
-	// If enabled add the stacktrace to the logging details
-	b := apiErr.StackTraceLoggingBehavior()
-	switch b {
-	case serr.DeferToDefaultBehavior:
-		// By default, 4xx should *not* log stack trace. Everything else should.
-		if statusCode < 400 || statusCode >= 500 {
-			fields = append(fields, "stacktrace", apiErr.Stacktrace())
-		}
-		break
-	case serr.ForceNoStackTrace:
-		break
-	case serr.ForceStackTrace:
-		fields = append(fields, "stacktrace", apiErr.Stacktrace())
-		break
+	span := trace.SpanFromContext(request.Context())
+	traceId := span.SpanContext().TraceID().String()
+	if traceId != "" {
+		fields = append(fields, "traceId", traceId)
 	}
-
-	if apiErr.Origin() != "" {
-		fields = append(fields, "src", apiErr.Origin())
+	spanId := span.SpanContext().SpanID().String()
+	if spanId != "" {
+		fields = append(fields, "spanId", spanId)
 	}
 
 	// Add metadata about the request principal if present to the logging fields
@@ -576,25 +606,7 @@ func LogAPIError(
 		fields = append(fields, "principal-name", principal.Name)
 		fields = append(fields, "principal-type", principal.Type)
 	}
-
-	// If a cause was supplied add it to the logging fields
-	if apiErr.Cause() != nil {
-		fields = append(fields, "error", apiErr.Cause())
-	}
-
-	// Add any extra details to the logging fields
-	for _, extraDetails := range apiErr.ExtraDetailsForLogging() {
-		fields = append(fields, extraDetails.Key, extraDetails.Value)
-	}
-
-	// Set the message
-	msg := "Could not handle request"
-	if apiErr.Message() != "" {
-		msg = apiErr.Message()
-	}
-
-	// Log it, full send!
-	log.With(fields...).Error(msg)
+	return fields
 }
 
 func writeErrorResponse(writer gin.ResponseWriter, apiErr serr.Error, statusCode int, errorID string, log *zap.SugaredLogger) {
@@ -608,5 +620,18 @@ func writeErrorResponse(writer gin.ResponseWriter, apiErr serr.Error, statusCode
 	err := json.NewEncoder(writer).Encode(apiErr.ToErrorResponseContract(errorID))
 	if err != nil {
 		log.Errorf("Failed to write error response: %s", err)
+	}
+}
+
+// requestLogger simple middleware that logs request details if the path isn't on the blocklist
+func requestLogger(log *zap.SugaredLogger, blockList []string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Next()
+
+		if !slices.Contains(blockList, c.FullPath()) {
+			log.
+				With(getBaseFields(c.Request, c.Writer.Status())...).
+				Infof("request: %s %s", c.Request.Method, c.FullPath())
+		}
 	}
 }
