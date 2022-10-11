@@ -50,7 +50,7 @@ func TestAuthMiddleware(test *testing.T) {
 				"good": "dobry",
 			},
 			statusCode: http.StatusUnauthorized,
-			errorMsg:   "Must provide Authorization header",
+			errorMsg:   "must provide Authorization header",
 		},
 		{
 			desc:    "bad Auth header",
@@ -59,7 +59,7 @@ func TestAuthMiddleware(test *testing.T) {
 				"Authorization": "ulice",
 			},
 			statusCode: http.StatusUnauthorized,
-			errorMsg:   "Malformed token",
+			errorMsg:   "malformed token",
 		},
 		{
 			desc:    "should prioritize Glados proxied header",

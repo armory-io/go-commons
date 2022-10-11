@@ -37,7 +37,7 @@ func TestCaptureAsString(t *testing.T) {
 	assert.Contains(
 		t,
 		lines[0],
-		"go.uber.org/zap.TestTakeStacktrace",
+		"github.com/armory-io/go-commons/stacktrace.TestCaptureAsString",
 		"Expected stacktrace to start with the test.",
 	)
 }
@@ -72,7 +72,7 @@ func TestCaptureAsStringWithSkipInnerFunc(t *testing.T) {
 func TestCaptureAsStringDeepStack(t *testing.T) {
 	const (
 		N                  = 500
-		withStackDepthName = "go.uber.org/zap.withStackDepth"
+		withStackDepthName = "github.com/armory-io/go-commons/stacktrace.withStackDepth"
 	)
 	withStackDepth(N, func() {
 		trace := CaptureAsString(0)
