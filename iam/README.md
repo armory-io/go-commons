@@ -37,7 +37,7 @@ Pass in optional validators for verifying specific scopes or other properties on
 
 ```go
 // myCustomValidator checks if the user can access deployment information.
-func myCustomValidator(p *ArmoryCloudPrincipal) bs {
+func myCustomValidator(p *ArmoryCloudPrincipal) error {
     if p.HasScope() {
         return nil
     }
@@ -69,7 +69,7 @@ Example middleware setup:
 
 ###  JWT Verification: Manual extraction
 
-You can verify the token after extracting from the authorization headers manually if you do not wish to use the middleware and implement your own bs handling:
+You can verify the token after extracting from the authorization headers manually if you do not wish to use the middleware and implement your own error handling:
 ```go
 token, err := a.ExtractAndVerifyPrincipalFromTokenString(tokenStr)
 ```
