@@ -39,12 +39,3 @@ jobs:
           artifactory_user: ${{ secrets.ARTIFACTORY_USER }}
           artifactory_token: ${{ secrets.ARTIFACTORY_TOKEN }}
           go_version: '1.18'
-
-      - name: trigger github jvm updater workflow
-        uses: benc-uk/workflow-dispatch@v1
-        with:
-          ref: master
-          repo: armory-io/infra-armory-cloud-github-settings-scraper
-          workflow: Update Go Commons
-          token: ${{ secrets.ARMORY_PLATFORM_GITHUB_PAT_TOKEN }}
-          inputs: '{ "version": "${{ github.event.release.tag_name }}" }'

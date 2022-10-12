@@ -1,0 +1,17 @@
+name: update go commons projects
+on:
+  release:
+    types: [released]
+
+jobs:
+  trigger-workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: trigger github go-commons updater workflow
+        uses: benc-uk/workflow-dispatch@v1
+        with:
+          ref: master
+          repo: armory-io/infra-armory-cloud-github-settings-scraper
+          workflow: Update Go Commons
+          token: ${{ secrets.ARMORY_PLATFORM_GITHUB_PAT_TOKEN }}
+          inputs: '{ "version": "${{ github.event.release.tag_name }}" }'
