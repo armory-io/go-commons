@@ -377,6 +377,11 @@ type RequestDetails struct {
 
 type requestDetailsKey struct{}
 
+// AddRequestDetailsToCtx is exposed for testing and allows tests to configure the request details when testing handler functions
+func AddRequestDetailsToCtx(ctx context.Context, details RequestDetails) context.Context {
+	return context.WithValue(ctx, requestDetailsKey{}, details)
+}
+
 // GetRequestDetailsFromContext fetches the server.RequestDetails from the context
 func GetRequestDetailsFromContext(ctx context.Context) (*RequestDetails, error) {
 	v, ok := ctx.Value(requestDetailsKey{}).(RequestDetails)
@@ -430,7 +435,7 @@ func ginHOF[REQUEST, RESPONSE any](
 		}
 
 		// Stuff Request details into the context
-		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), requestDetailsKey{}, RequestDetails{
+		c.Request = c.Request.WithContext(AddRequestDetailsToCtx(c.Request.Context(), RequestDetails{
 			QueryParameters: c.Request.URL.Query(),
 			PathParameters:  pathParameters,
 			Headers:         c.Request.Header,
@@ -516,7 +521,7 @@ func ginHOF[REQUEST, RESPONSE any](
 	}
 }
 
-// writeAndLogApiErrorThenAbort a helper function that will take a Response and ensure that it is logged and a properly
+// writeAndLogApiErrorThenAbort a helper function that will take a serr.Error and ensure that it is logged and a properly
 // formatted response is returned to the requester
 func writeAndLogApiErrorThenAbort(c *gin.Context, apiErr serr.Error, log *zap.SugaredLogger) {
 	errorID := uuid.NewString()
