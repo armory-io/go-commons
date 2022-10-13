@@ -291,13 +291,13 @@ func (s *ServerTestSuite) TestGinHOF() {
 			return SimpleResponse(MyResponse{MyCoolResponse: "Hey"}), nil
 		}
 		ginHOF(handlerFn, &handlerDTO{
-			StatusCode: http.StatusOK,
+			StatusCode: http.StatusCreated,
 			AuthOptOut: true,
 		}, nil, s.log)(c)
 
 		res := ExtractResponse[MyResponse](t, recorder)
 		assert.Equal(t, "Hey", res.MyCoolResponse)
-		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
+		assert.Equal(t, http.StatusCreated, recorder.Result().StatusCode)
 	})
 
 	s.T().Run("ginHOF should return the expected response when a handler returns a valid response and overrides the status code and adds custom headers", func(t *testing.T) {

@@ -19,7 +19,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	armoryhttp "github.com/armory-io/go-commons/http"
 	"github.com/armory-io/go-commons/iam"
@@ -29,6 +28,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
+	"github.com/mitchellh/mapstructure"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
@@ -270,15 +270,14 @@ func configureServer(
 
 func writeResponse(contentType string, body any, w gin.ResponseWriter) serr.Error {
 	w.Header().Set("Content-Type", contentType)
-	switch contentType {
-	case "plain/text":
+	if contentType == "text/plain" || contentType == "application/yaml" {
 		t := reflect.TypeOf(body)
 		if t.Kind() != reflect.String {
 			return serr.NewErrorResponseFromApiError(serr.APIError{
 				Message:        "Failed to write response",
 				HttpStatusCode: http.StatusInternalServerError,
 			},
-				serr.WithErrorMessage("Handler specified that it produces plain/text but didn't return a string as the response"),
+				serr.WithErrorMessage(fmt.Sprintf("Handler specified that it produces %s but didn't return a string as the response", contentType)),
 				serr.WithExtraDetailsForLogging(serr.KVPair{
 					Key:   "actualType",
 					Value: t.String(),
@@ -292,7 +291,7 @@ func writeResponse(contentType string, body any, w gin.ResponseWriter) serr.Erro
 			}, serr.WithCause(err))
 		}
 		return nil
-	default:
+	} else {
 		if err := json.NewEncoder(w).Encode(body); err != nil {
 			return serr.NewErrorResponseFromApiError(serr.APIError{
 				Message:        "Failed to write response",
@@ -345,11 +344,20 @@ var (
 	}
 )
 
-func authorizeRequest(ctx context.Context, h *handlerDTO) serr.Error {
-	// If the handler has not opted out of AuthN/AuthZ, extract the principal
+// ExtractPrincipalFromContext retrieves the principal from the context and returns a serr.Error
+func ExtractPrincipalFromContext(ctx context.Context) (*iam.ArmoryCloudPrincipal, serr.Error) {
 	principal, err := iam.ExtractPrincipalFromContext(ctx)
 	if err != nil {
-		return serr.NewErrorResponseFromApiError(invalidCredentialsError, serr.WithCause(err))
+		return nil, serr.NewErrorResponseFromApiError(invalidCredentialsError, serr.WithCause(err))
+	}
+	return principal, nil
+}
+
+func authorizeRequest(ctx context.Context, h *handlerDTO) serr.Error {
+	// If the handler has not opted out of AuthN/AuthZ, extract the principal
+	principal, err := ExtractPrincipalFromContext(ctx)
+	if err != nil {
+		return err
 	}
 
 	for _, authZValidator := range h.AuthZValidators {
@@ -382,13 +390,45 @@ func AddRequestDetailsToCtx(ctx context.Context, details RequestDetails) context
 	return context.WithValue(ctx, requestDetailsKey{}, details)
 }
 
+var (
+	unableToExtractRequestDetails = serr.APIError{
+		Message:        "Unable to extract request details",
+		HttpStatusCode: http.StatusInternalServerError,
+	}
+)
+
 // GetRequestDetailsFromContext fetches the server.RequestDetails from the context
-func GetRequestDetailsFromContext(ctx context.Context) (*RequestDetails, error) {
+func GetRequestDetailsFromContext(ctx context.Context) (*RequestDetails, serr.Error) {
 	v, ok := ctx.Value(requestDetailsKey{}).(RequestDetails)
 	if !ok {
-		return nil, errors.New("unable to extract request details")
+		return nil, serr.NewErrorResponseFromApiError(unableToExtractRequestDetails)
 	}
 	return &v, nil
+}
+
+func extract[T any](ctx context.Context, pick func(details *RequestDetails) any) (*T, serr.Error) {
+	d, err := GetRequestDetailsFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var t T
+	if err := mapstructure.WeakDecode(pick(d), &t); err != nil {
+		return nil, serr.NewErrorResponseFromApiError(unableToExtractRequestDetails, serr.WithCause(err))
+	}
+	return &t, nil
+}
+
+func ExtractPathParamsFromRequestContext[T any](ctx context.Context) (*T, serr.Error) {
+	return extract[T](ctx, func(details *RequestDetails) any {
+		return details.PathParameters
+	})
+}
+
+func ExtractQueryParamsFromRequestContext[T any](ctx context.Context) (*T, serr.Error) {
+	return extract[T](ctx, func(details *RequestDetails) any {
+		return details.QueryParameters
+	})
 }
 
 var (

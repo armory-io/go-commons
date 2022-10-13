@@ -319,3 +319,9 @@ func NewSimpleErrorWithStatusCode(msgForResponse string, statusCodeForResponse i
 		HttpStatusCode: statusCodeForResponse,
 	}, WithCause(cause))
 }
+
+// NewWrappedErrorWithStatusCode is a helper function that creates a serr.Error from an error. It is appropriate
+// to use when the provided err is intended for end-user consumption (e.g., a custom error message).
+func NewWrappedErrorWithStatusCode(err error, statusCodeForResponse int) Error {
+	return NewSimpleErrorWithStatusCode(err.Error(), statusCodeForResponse, err)
+}

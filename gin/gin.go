@@ -61,7 +61,6 @@ func NewGinServer(
 
 	// Ideally the middleware would be decoupled from one another
 	// but we need to make sure the middleware are applied in order.
-	g.Use(armoryhttp.GinClientVersionMiddleware)
 	g.Use(metrics.GinHTTPMiddleware(ms))
 	g.Use(iam.GinAuthMiddleware(ps, lo.Flatten(gsp.Allowed)))
 

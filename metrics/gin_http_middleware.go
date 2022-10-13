@@ -17,7 +17,6 @@
 package metrics
 
 import (
-	armoryhttp "github.com/armory-io/go-commons/http"
 	"github.com/gin-gonic/gin"
 	"strconv"
 	"time"
@@ -42,11 +41,9 @@ func GinHTTPMiddleware(metrics *Metrics) gin.HandlerFunc {
 		uri := c.FullPath()
 
 		tags := map[string]string{
-			"uri":           uri,
-			"status":        strconv.Itoa(statusCode),
-			"client":        armoryhttp.ClientVersionFromContext(c.Request.Context()).Product,
-			"clientVersion": armoryhttp.ClientVersionFromContext(c.Request.Context()).Version,
-			"outcome":       outcome,
+			"uri":     uri,
+			"status":  strconv.Itoa(statusCode),
+			"outcome": outcome,
 		}
 
 		metrics.TimerWithTags("http.server.requests", tags).Record(time.Now().Sub(start))
