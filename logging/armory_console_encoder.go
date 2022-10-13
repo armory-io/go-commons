@@ -36,6 +36,9 @@ import (
 func NewArmoryDevConsoleEncoder(disableColor bool) zapcore.Encoder {
 	if disableColor {
 		color.NoColor = true
+	} else {
+		// Forces color on for the dev cluster, because by default the color lib, disables color when there is no tty.
+		color.NoColor = false
 	}
 	return &consoleEncoder{
 		m: zapcore.NewMapObjectEncoder(),
