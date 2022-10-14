@@ -160,7 +160,7 @@ func newHandlerRegistry(
 					Method:          strings.TrimSpace(h.Config().Method),
 					AuthZValidators: validators,
 					AuthOptOut:      h.Config().AuthOptOut,
-					StatusCode:      http.StatusOK,
+					StatusCode:      h.Config().StatusCode,
 					Default:         h.Config().Default,
 				}
 
