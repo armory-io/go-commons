@@ -28,7 +28,7 @@ import (
 )
 
 func NewClient(ctx context.Context, log *zap.SugaredLogger, svc ClientSettings, identity token.Identity) (*Client, error) {
-	rt, err := makeClient(ctx, log, svc, identity)
+	rt, err := NewRoundTripper(ctx, log, svc, identity)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ type Client struct {
 	c       *http.Client
 }
 
-func makeClient(ctx context.Context, log *zap.SugaredLogger, s ClientSettings, identity token.Identity) (http.RoundTripper, error) {
+func NewRoundTripper(ctx context.Context, log *zap.SugaredLogger, s ClientSettings, identity token.Identity) (http.RoundTripper, error) {
 	t := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
