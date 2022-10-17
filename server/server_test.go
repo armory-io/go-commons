@@ -79,7 +79,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 
 		var actual *RequestDetails
 		ginHOF(func(ctx context.Context, _ Void) (*Response[Void], serr.Error) {
-			actual, _ = GetRequestDetailsFromContext(ctx)
+			actual, _ = ExtractRequestDetailsFromContext(ctx)
 			return nil, nil
 		}, handler, nil, s.log)(c)
 		assert.Equal(s.T(), expected, actual)
