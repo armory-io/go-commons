@@ -270,7 +270,8 @@ func configureServer(
 
 func writeResponse(contentType string, body any, w gin.ResponseWriter) serr.Error {
 	w.Header().Set("Content-Type", contentType)
-	if contentType == "text/plain" || contentType == "application/yaml" {
+	switch contentType {
+	case "text/plain", "application/yaml":
 		t := reflect.TypeOf(body)
 		if t.Kind() != reflect.String {
 			return serr.NewErrorResponseFromApiError(serr.APIError{
@@ -291,7 +292,7 @@ func writeResponse(contentType string, body any, w gin.ResponseWriter) serr.Erro
 			}, serr.WithCause(err))
 		}
 		return nil
-	} else {
+	default:
 		if err := json.NewEncoder(w).Encode(body); err != nil {
 			return serr.NewErrorResponseFromApiError(serr.APIError{
 				Message:        "Failed to write response",
@@ -370,7 +371,7 @@ func authorizeRequest(ctx context.Context, h *handlerDTO) serr.Error {
 	return nil
 }
 
-// RequestDetails use server.GetRequestDetailsFromContext to get this out of the request context
+// RequestDetails use server.ExtractRequestDetailsFromContext to get this out of the request context
 type RequestDetails struct {
 	// Headers the headers sent along with the request
 	Headers http.Header
@@ -397,8 +398,8 @@ var (
 	}
 )
 
-// GetRequestDetailsFromContext fetches the server.RequestDetails from the context
-func GetRequestDetailsFromContext(ctx context.Context) (*RequestDetails, serr.Error) {
+// ExtractRequestDetailsFromContext fetches the server.RequestDetails from the context
+func ExtractRequestDetailsFromContext(ctx context.Context) (*RequestDetails, serr.Error) {
 	v, ok := ctx.Value(requestDetailsKey{}).(RequestDetails)
 	if !ok {
 		return nil, serr.NewErrorResponseFromApiError(unableToExtractRequestDetails)
@@ -407,7 +408,7 @@ func GetRequestDetailsFromContext(ctx context.Context) (*RequestDetails, serr.Er
 }
 
 func extract[T any](ctx context.Context, pick func(details *RequestDetails) any) (*T, serr.Error) {
-	d, err := GetRequestDetailsFromContext(ctx)
+	d, err := ExtractRequestDetailsFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -419,12 +420,16 @@ func extract[T any](ctx context.Context, pick func(details *RequestDetails) any)
 	return &t, nil
 }
 
+// ExtractPathParamsFromRequestContext accepts a type param T and attempts to map the HTTP
+// request's path params into T.
 func ExtractPathParamsFromRequestContext[T any](ctx context.Context) (*T, serr.Error) {
 	return extract[T](ctx, func(details *RequestDetails) any {
 		return details.PathParameters
 	})
 }
 
+// ExtractQueryParamsFromRequestContext accepts a type param T and attempts to map the HTTP
+// request's query params into T.
 func ExtractQueryParamsFromRequestContext[T any](ctx context.Context) (*T, serr.Error) {
 	return extract[T](ctx, func(details *RequestDetails) any {
 		return details.QueryParameters
