@@ -29,6 +29,7 @@ const (
 	applicationName          = "APPLICATION_NAME"
 	applicationEnv           = "APPLICATION_ENVIRONMENT"
 	applicationVersion       = "APPLICATION_VERSION"
+	LoggerType               = "LOGGER_TYPE"
 	local                    = "local"
 )
 
@@ -77,4 +78,9 @@ func GetApplicationVersion() string {
 		version = "unset"
 	}
 	return version
+}
+
+// GetApplicationLoggingType returns the logging type env var if set
+func GetApplicationLoggingType() string {
+	return os.Getenv(LoggerType)
 }
