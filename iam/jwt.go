@@ -76,7 +76,7 @@ func (j *JwtToken) Fetch(token []byte) (interface{}, interface{}, error) {
 		return nil, nil, err
 	}
 
-	untypedPrincipal, wasClaimPresent := parsedJwt.Get(armoryCloudPrincipalClaimNamespace)
+	untypedPrincipal, wasClaimPresent := parsedJwt.Get(ArmoryCloudPrincipalClaimNamespace)
 	if !wasClaimPresent {
 		return nil, nil, errors.New("required armory cloud principal claim was missing from token")
 	}

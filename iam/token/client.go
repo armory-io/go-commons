@@ -40,7 +40,7 @@ type tokenGetter interface {
 func getTokenGetter(auth Identity, log *zap.SugaredLogger) tokenGetter {
 	if auth.Armory.ClientId != "" {
 		log.Infof("set to obtain token from %s", auth.Armory.TokenIssuerUrl)
-		return newRemoteTokenSupplier(auth.Armory)
+		return NewRemoteTokenSupplier(auth.Armory)
 	}
 	return nil
 }
