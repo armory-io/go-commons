@@ -37,21 +37,37 @@ const (
 func ArmoryLoggerProvider(appMd metadata.ApplicationMetadata) (*zap.Logger, error) {
 	loggerOptions := armoryStdLogOpt()
 
-	switch strings.ToLower(appMd.Environment) {
-	case "production", "prod", "staging", "stage":
-		var baseLogFields []zap.Field
-		baseLogFields = appendFieldIfPresent(applicationName, appMd.Name, baseLogFields)
-		baseLogFields = appendFieldIfPresent(environment, appMd.Environment, baseLogFields)
-		baseLogFields = appendFieldIfPresent(replicaSet, appMd.Replicaset, baseLogFields)
-		baseLogFields = appendFieldIfPresent(hostname, appMd.Hostname, baseLogFields)
-		baseLogFields = appendFieldIfPresent(version, appMd.Version, baseLogFields)
-
+	switch strings.ToLower(appMd.LoggingType) {
+	case "json":
+		return createJSONLogger(appMd, loggerOptions)
+	case "console":
+		baseLogFields := getProductionLoggerFields(appMd)
 		loggerOptions = append(loggerOptions, zap.Fields(baseLogFields...))
-
-		return zap.NewProductionConfig().Build(loggerOptions...)
+		return createArmoryConsoleLogger(loggerOptions, zapcore.InfoLevel)
 	default:
-		return createArmoryDevLogger(loggerOptions, zapcore.InfoLevel)
+		switch strings.ToLower(appMd.Environment) {
+		case "production", "prod", "staging", "stage":
+			return createJSONLogger(appMd, loggerOptions)
+		default:
+			return createArmoryConsoleLogger(loggerOptions, zapcore.InfoLevel)
+		}
 	}
+}
+
+func createJSONLogger(appMd metadata.ApplicationMetadata, loggerOptions []zap.Option) (*zap.Logger, error) {
+	baseLogFields := getProductionLoggerFields(appMd)
+	loggerOptions = append(loggerOptions, zap.Fields(baseLogFields...))
+	return zap.NewProductionConfig().Build(loggerOptions...)
+}
+
+func getProductionLoggerFields(appMd metadata.ApplicationMetadata) []zap.Field {
+	var baseLogFields []zap.Field
+	baseLogFields = appendFieldIfPresent(applicationName, appMd.Name, baseLogFields)
+	baseLogFields = appendFieldIfPresent(environment, appMd.Environment, baseLogFields)
+	baseLogFields = appendFieldIfPresent(replicaSet, appMd.Replicaset, baseLogFields)
+	baseLogFields = appendFieldIfPresent(hostname, appMd.Hostname, baseLogFields)
+	baseLogFields = appendFieldIfPresent(version, appMd.Version, baseLogFields)
+	return baseLogFields
 }
 
 func armoryStdLogOpt() []zap.Option {
@@ -63,10 +79,10 @@ func armoryStdLogOpt() []zap.Option {
 }
 
 func StdArmoryDevLogger(level zapcore.Level) (*zap.Logger, error) {
-	return createArmoryDevLogger(armoryStdLogOpt(), level)
+	return createArmoryConsoleLogger(armoryStdLogOpt(), level)
 }
 
-func createArmoryDevLogger(loggerOptions []zap.Option, level zapcore.Level) (*zap.Logger, error) {
+func createArmoryConsoleLogger(loggerOptions []zap.Option, level zapcore.Level) (*zap.Logger, error) {
 	sink, closeOut, err := zap.Open("stderr")
 	if err != nil {
 		return nil, err

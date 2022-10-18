@@ -12,6 +12,7 @@ type ApplicationMetadata struct {
 	Environment string
 	Replicaset  string
 	Hostname    string
+	LoggingType string
 }
 
 func ApplicationMetadataProvider() ApplicationMetadata {
@@ -24,6 +25,7 @@ func ApplicationMetadataProvider() ApplicationMetadata {
 		Version:     envutils.GetApplicationVersion(),
 		Environment: envutils.GetEnvironmentName(),
 		Replicaset:  envutils.GetReplicaSetName(),
+		LoggingType: envutils.GetApplicationLoggingType(),
 		Hostname:    hostname,
 	}
 }
