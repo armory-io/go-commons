@@ -18,6 +18,7 @@ package server
 
 import (
 	"fmt"
+	"github.com/armory-io/go-commons/management/info"
 	"github.com/armory-io/go-commons/server/serr"
 	"github.com/elnormous/contenttype"
 	"github.com/gin-gonic/gin"
@@ -38,20 +39,21 @@ type (
 	}
 
 	handlerDTO struct {
-		Path            string
-		Method          string
-		AuthZValidators []AuthZValidatorFn
-		AuthOptOut      bool
-		Consumes        string
-		Produces        string
-		StatusCode      int
-		HandlerFn       gin.HandlerFunc
-		MediaType       contenttype.MediaType
-		Default         bool
+		Path            string                `json:"-"`
+		Method          string                `json:"method"`
+		AuthZValidators []AuthZValidatorFn    `json:"-"`
+		AuthOptOut      bool                  `json:"authOptOut"`
+		Consumes        string                `json:"consumes"`
+		Produces        string                `json:"produces"`
+		StatusCode      int                   `json:"statusCode"`
+		HandlerFn       gin.HandlerFunc       `json:"-"`
+		MediaType       contenttype.MediaType `json:"-"`
+		Default         bool                  `json:"default"`
 	}
 )
 
 type handlerRegistry struct {
+	name   string
 	logger *zap.SugaredLogger
 	data   map[handlerDTOKey]map[string]*handlerDTO
 }
@@ -63,6 +65,20 @@ type registerHandlersInput struct {
 
 type iHandlerRegistry interface {
 	registerHandlers(in registerHandlersInput) error
+	Contribute(builder *info.InfoBuilder)
+}
+
+// Contribute implements the management.infoContributor interface so we can add available routes at the /info endpoint
+func (r *handlerRegistry) Contribute(builder *info.InfoBuilder) {
+	data := make(map[string][]*handlerDTO)
+	for k, v := range r.data {
+		data[k.path] = maps.Values(v)
+	}
+	builder.WithDetails(map[string]any{
+		"routes": map[string]any{
+			r.name: data,
+		},
+	})
 }
 
 func (r *handlerRegistry) registerHandlers(in registerHandlersInput) error {
@@ -145,11 +161,7 @@ func createMultiMimeTypeFn(handlersByMimeType map[string]*handlerDTO, logger *za
 	}
 }
 
-func newHandlerRegistry(
-	logger *zap.SugaredLogger,
-	requestValidator *validator.Validate,
-	controllerCollections ...[]IController,
-) (iHandlerRegistry, error) {
+func newHandlerRegistry(name string, logger *zap.SugaredLogger, requestValidator *validator.Validate, controllerCollections ...[]IController) (iHandlerRegistry, error) {
 	registryData := make(map[handlerDTOKey]map[string]*handlerDTO)
 	for _, collection := range controllerCollections {
 		for _, c := range collection {
@@ -227,6 +239,7 @@ func newHandlerRegistry(
 	}
 
 	return &handlerRegistry{
+		name:   name,
 		logger: logger,
 		data:   registryData,
 	}, nil
