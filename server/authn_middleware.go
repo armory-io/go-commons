@@ -24,7 +24,7 @@ import (
 	"net/http"
 )
 
-func ginAuthMiddleware(ps *iam.ArmoryCloudPrincipalService, log *zap.SugaredLogger) gin.HandlerFunc {
+func ginAuthMiddleware(as AuthService, log *zap.SugaredLogger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// extract access token from request
 		auth, err := iam.ExtractBearerToken(c.Request)
@@ -36,7 +36,7 @@ func ginAuthMiddleware(ps *iam.ArmoryCloudPrincipalService, log *zap.SugaredLogg
 			return
 		}
 		// verify principal from access token
-		if err := ps.VerifyPrincipalAndSetContext(auth, c); err != nil {
+		if err := as.VerifyPrincipalAndSetContext(auth, c); err != nil {
 			apiErr := serr.NewSimpleErrorWithStatusCode(
 				"Failed to verify principal from access token", http.StatusUnauthorized, err)
 			writeAndLogApiErrorThenAbort(c, apiErr, log)
