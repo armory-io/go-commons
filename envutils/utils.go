@@ -26,6 +26,7 @@ const (
 	armoryEnvironmentName    = "ARMORY_ENVIRONMENT_NAME"
 	armoryReplicaSetName     = "ARMORY_REPLICA_SET_NAME"
 	armoryApplicationVersion = "ARMORY_APPLICATION_VERSION"
+	armoryDeploymentId       = "ARMORY_DEPLOYMENT_ID"
 	applicationName          = "APPLICATION_NAME"
 	applicationEnv           = "APPLICATION_ENVIRONMENT"
 	applicationVersion       = "APPLICATION_VERSION"
@@ -83,4 +84,9 @@ func GetApplicationVersion() string {
 // GetApplicationLoggingType returns the logging type env var if set
 func GetApplicationLoggingType() string {
 	return os.Getenv(LoggerType)
+}
+
+// GetDeploymentId Fetches the armory deployment id, if set
+func GetDeploymentId() string {
+	return os.Getenv(armoryDeploymentId)
 }

@@ -7,12 +7,13 @@ import (
 )
 
 type ApplicationMetadata struct {
-	Name        string
-	Version     string
-	Environment string
-	Replicaset  string
-	Hostname    string
-	LoggingType string
+	Name         string `json:"name,omitempty"`
+	Version      string `json:"version,omitempty"`
+	Environment  string `json:"environment,omitempty"`
+	Replicaset   string `json:"replicaset,omitempty"`
+	Hostname     string `json:"hostname,omitempty"`
+	LoggingType  string `json:"-"`
+	DeploymentId string `json:"deploymentId,omitempty"`
 }
 
 func ApplicationMetadataProvider() ApplicationMetadata {
@@ -21,12 +22,13 @@ func ApplicationMetadataProvider() ApplicationMetadata {
 		hostname = "unknown"
 	}
 	return ApplicationMetadata{
-		Name:        envutils.GetApplicationName(),
-		Version:     envutils.GetApplicationVersion(),
-		Environment: envutils.GetEnvironmentName(),
-		Replicaset:  envutils.GetReplicaSetName(),
-		LoggingType: envutils.GetApplicationLoggingType(),
-		Hostname:    hostname,
+		Name:         envutils.GetApplicationName(),
+		Version:      envutils.GetApplicationVersion(),
+		Environment:  envutils.GetEnvironmentName(),
+		Replicaset:   envutils.GetReplicaSetName(),
+		LoggingType:  envutils.GetApplicationLoggingType(),
+		DeploymentId: envutils.GetDeploymentId(),
+		Hostname:     hostname,
 	}
 }
 
