@@ -17,6 +17,7 @@
 // Package typesafeconfig is for resolving configurations from many sources into a typesafe object
 //
 // Quickstart:
+//
 //	import . "github.com/armory-io/go-commons/typesafeconfig"
 //
 //	type MyConfiguration struct {
@@ -25,7 +26,7 @@
 //		someList []string
 //	}
 //
-// 	conf := ResolveConfiguration[MyConfiguration](log,
+//	conf := ResolveConfiguration[MyConfiguration](log,
 //		WithBaseConfigurationNames("myappname"), // defaults to application
 //		WithActiveProfiles("prod"),
 //	)
@@ -36,6 +37,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"github.com/armory-io/go-commons/maputils"
 	"github.com/armory-io/go-commons/secrets"
 	"github.com/cbroglie/mustache"
 	"github.com/mitchellh/mapstructure"
@@ -101,13 +103,13 @@ func WithExplicitProperties[T string | map[string]any](properties ...T) Option {
 			pAny := any(propertySource)
 			switch pAny.(type) {
 			case map[string]any:
-				resolver.explicitProperties = mergeSources(resolver.explicitProperties, pAny.(map[string]any))
+				resolver.explicitProperties = maputils.MergeSources(resolver.explicitProperties, pAny.(map[string]any))
 			case string:
 				kvPair := strings.SplitN(pAny.(string), "=", 2)
 				rawKey := kvPair[0]
 				value := kvPair[1]
 				key := strings.Split(rawKey, ".")
-				setValue(resolver.explicitProperties, key, value)
+				maputils.SetValue(resolver.explicitProperties, key, value)
 			}
 		}
 	}
@@ -148,7 +150,7 @@ func ResolveConfiguration[T any](log *zap.SugaredLogger, options ...Option) (*T,
 		loadEnvironmentSources(),
 		r.explicitProperties, // explicit properties should be the last source
 	)
-	untypedConfig := mergeSources(sources...)
+	untypedConfig := maputils.MergeSources(sources...)
 	// hydrate secret tokens
 	if err = resolveSecrets(untypedConfig); err != nil {
 		return nil, err
@@ -182,69 +184,9 @@ func loadEnvironmentSources() map[string]any {
 		rawKey := kvPair[0]
 		value := kvPair[1]
 		key := strings.Split(rawKey, "_")
-		setValue(config, key, value)
+		maputils.SetValue(config, key, value)
 	}
 	return config
-}
-
-func setValue(config map[string]any, key []string, value any) {
-	if len(key) == 1 {
-		config[key[0]] = value
-		return
-	}
-	cur, remaining := pop(key)
-	var nested map[string]any
-	if config[cur] == nil {
-		nested = make(map[string]any)
-	} else {
-		curNested := config[cur]
-		unboxed, ok := curNested.(map[string]any)
-		if !ok {
-			nested = make(map[string]any)
-		} else {
-			nested = unboxed
-		}
-	}
-	config[cur] = nested
-	setValue(nested, remaining, value)
-}
-
-func pop[T any](array []T) (T, []T) {
-	return array[0], array[1:]
-}
-
-// mergeSources recursively left merges config sources, omitting any non-map values that are not one of: lists, numbers, or booleans
-// un-flattens keys before merging into new map
-func mergeSources(sources ...map[string]any) map[string]any {
-	m := make(map[string]any)
-	for _, unNormalizedSource := range sources {
-		source := normalizeKeys(unNormalizedSource)
-		// iterate through key and if the value is a map recurse, else set the key to the value if type is a number, list or boolean
-		for key := range source {
-			val := source[key]
-			cur := m[key]
-			if cur == nil {
-				m[key] = val
-				continue
-			}
-
-			curT := reflect.TypeOf(cur)
-			valT := reflect.TypeOf(val)
-			switch curT.Kind() {
-			case reflect.Map:
-				typedCur := cur.(map[string]any)
-				if valT.Kind() == reflect.Map {
-					typedVal := val.(map[string]any)
-					m[key] = mergeSources(typedCur, typedVal)
-				} else {
-					m[key] = val
-				}
-			case reflect.Array, reflect.String, reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Float32, reflect.Float64:
-				m[key] = val
-			}
-		}
-	}
-	return m
 }
 
 // resolveTemplates resolves values that are mustache templates, but currently only sets the context to { "env": { [key: string]: string } }
@@ -310,22 +252,6 @@ func recurseStringValuesAndMap(config map[string]any, valueMapper func(value str
 		}
 	}
 	return nil
-}
-
-func normalizeKeys(source map[string]any) map[string]any {
-	m := make(map[string]any)
-	// un-flatten keys, ['foo.bar.bam']=true -> ['foo']['bar']['bam']=true
-	for _, key := range maps.Keys(source) {
-		normalizedKey := strings.ToLower(key)
-		val := source[key]
-		if strings.Contains(normalizedKey, ".") {
-			parts := strings.Split(normalizedKey, ".")
-			setValue(m, parts, val)
-		} else {
-			m[normalizedKey] = val
-		}
-	}
-	return m
 }
 
 func loadFileBasedConfigurationSources(

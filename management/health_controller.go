@@ -19,7 +19,7 @@ type HealthCheckResponse struct {
 	Info   map[string]any `json:"info,omitempty"`
 }
 
-func NewHealthCheckController(log *zap.SugaredLogger, i Indicators) server.ManagementController {
+func NewHealthCheckController(log *zap.SugaredLogger, i healthIndicators) server.ManagementController {
 	return server.ManagementController{
 		Controller: &HealthController{
 			log:              log,
@@ -41,12 +41,12 @@ type Health struct {
 	Msg   string
 }
 
-type Indicators struct {
+type healthIndicators struct {
 	fx.In
 	HealthIndicators []indicator `group:"health-check"`
 }
 
-type Indicator struct {
+type HealthIndicator struct {
 	fx.Out
 	HealthIndicator indicator `group:"health-check"`
 }
