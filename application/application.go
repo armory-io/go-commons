@@ -22,6 +22,7 @@ import (
 	"github.com/armory-io/go-commons/iam"
 	"github.com/armory-io/go-commons/logging"
 	"github.com/armory-io/go-commons/management"
+	"github.com/armory-io/go-commons/management/info"
 	"github.com/armory-io/go-commons/metadata"
 	"github.com/armory-io/go-commons/metrics"
 	"github.com/armory-io/go-commons/mysql"
@@ -57,6 +58,9 @@ var ModuleV2 = fx.Options(
 	server.Module,
 	management.Module,
 	tracing.Module,
-	fx.Provide(metrics.New),
-	fx.Provide(iam.New),
+	fx.Provide(
+		metrics.New,
+		iam.New,
+		info.New,
+	),
 )
