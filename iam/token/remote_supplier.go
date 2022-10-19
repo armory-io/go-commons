@@ -28,17 +28,17 @@ import (
 	"time"
 )
 
-func newRemoteTokenSupplier(cloud ArmoryCloud) *remoteTokenSupplier {
-	return &remoteTokenSupplier{
+func NewRemoteTokenSupplier(cloud ArmoryCloud) *RemoteTokenSupplier {
+	return &RemoteTokenSupplier{
 		settings: cloud,
 	}
 }
 
-type remoteTokenSupplier struct {
+type RemoteTokenSupplier struct {
 	settings ArmoryCloud
 }
 
-func (r *remoteTokenSupplier) GetToken(ctx context.Context) (string, *time.Time, error) {
+func (r *RemoteTokenSupplier) GetToken(ctx context.Context) (string, *time.Time, error) {
 	data := url.Values{}
 	data.Set("grant_type", "client_credentials")
 	data.Set("client_id", r.settings.ClientId)
@@ -80,7 +80,7 @@ func (r *remoteTokenSupplier) GetToken(ctx context.Context) (string, *time.Time,
 	return rt.AccessToken, &exp, nil
 }
 
-func (r *remoteTokenSupplier) parseOptions() []jwt.ParseOption {
+func (r *RemoteTokenSupplier) parseOptions() []jwt.ParseOption {
 	var opts []jwt.ParseOption
 	if r.settings.Verify {
 		opts = append(opts, jwt.WithValidate(true))

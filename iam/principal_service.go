@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	armoryCloudPrincipalClaimNamespace = "https://cloud.armory.io/principal"
+	ArmoryCloudPrincipalClaimNamespace = "https://cloud.armory.io/principal"
 	bearerPrefix                       = "Bearer"
 	authorizationHeader                = "Authorization"
 	proxiedAuthorizationHeader         = "X-Armory-Proxied-Authorization"
@@ -121,7 +121,7 @@ func ExtractBearerToken(r *http.Request) (string, error) {
 func tokenToPrincipal(untypedPrincipal any, scopes any) (*ArmoryCloudPrincipal, error) {
 	principal, ok := untypedPrincipal.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("unexpected %s claim format found", armoryCloudPrincipalClaimNamespace)
+		return nil, fmt.Errorf("unexpected %s claim format found", ArmoryCloudPrincipalClaimNamespace)
 	}
 
 	var typedPrincipal *ArmoryCloudPrincipal
@@ -136,7 +136,7 @@ func tokenToPrincipal(untypedPrincipal any, scopes any) (*ArmoryCloudPrincipal, 
 		return nil, fmt.Errorf("failed to configure token decoder: %w", err)
 	}
 	if err := decoder.Decode(principal); err != nil {
-		return nil, fmt.Errorf("unable to decode claim %s: %w", armoryCloudPrincipalClaimNamespace, err)
+		return nil, fmt.Errorf("unable to decode claim %s: %w", ArmoryCloudPrincipalClaimNamespace, err)
 	}
 
 	// ensure we don't inadvertently deserialize scopes from a fake scopes field in the principal
