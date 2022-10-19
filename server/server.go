@@ -22,6 +22,7 @@ import (
 	"fmt"
 	armoryhttp "github.com/armory-io/go-commons/http"
 	"github.com/armory-io/go-commons/iam"
+	"github.com/armory-io/go-commons/management/info"
 	"github.com/armory-io/go-commons/metadata"
 	"github.com/armory-io/go-commons/metrics"
 	"github.com/armory-io/go-commons/server/serr"
@@ -181,6 +182,7 @@ func ConfigureAndStartHttpServer(
 	managementControllers managementControllers,
 	ps *iam.ArmoryCloudPrincipalService,
 	md metadata.ApplicationMetadata,
+	is *info.InfoService,
 ) error {
 	gin.SetMode(gin.ReleaseMode)
 
@@ -188,18 +190,18 @@ func ConfigureAndStartHttpServer(
 		var controllers []IController
 		controllers = append(controllers, serverControllers.Controllers...)
 		controllers = append(controllers, managementControllers.Controllers...)
-		err := configureServer("http + management", lc, config.HTTP, config.RequestLogging, ps, logger, ms, md, controllers...)
+		err := configureServer("http + management", lc, config.HTTP, config.RequestLogging, ps, logger, ms, md, is, controllers...)
 		if err != nil {
 			return err
 		}
 		return nil
 	}
 
-	err := configureServer("http", lc, config.HTTP, config.RequestLogging, ps, logger, ms, md, serverControllers.Controllers...)
+	err := configureServer("http", lc, config.HTTP, config.RequestLogging, ps, logger, ms, md, is, serverControllers.Controllers...)
 	if err != nil {
 		return err
 	}
-	err = configureServer("management", lc, config.Management, config.RequestLogging, ps, logger, ms, md, managementControllers.Controllers...)
+	err = configureServer("management", lc, config.Management, config.RequestLogging, ps, logger, ms, md, is, managementControllers.Controllers...)
 	if err != nil {
 		return err
 	}
@@ -215,6 +217,7 @@ func configureServer(
 	logger *zap.SugaredLogger,
 	ms *metrics.Metrics,
 	md metadata.ApplicationMetadata,
+	is *info.InfoService,
 	controllers ...IController,
 ) error {
 	g := gin.New()
@@ -236,7 +239,7 @@ func configureServer(
 	authRequiredGroup := g.Group("")
 	authRequiredGroup.Use(ginAuthMiddleware(ps, logger))
 
-	handlerRegistry, err := newHandlerRegistry(logger, requestValidator, controllers)
+	handlerRegistry, err := newHandlerRegistry(name, logger, requestValidator, controllers)
 	if err != nil {
 		return err
 	}
@@ -264,6 +267,8 @@ func configureServer(
 			return server.Shutdown(ctx)
 		},
 	})
+
+	is.AddInfoContributor(handlerRegistry)
 
 	return nil
 }
