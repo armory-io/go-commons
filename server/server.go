@@ -173,6 +173,20 @@ func SimpleResponse[T any](body T) *Response[T] {
 	}
 }
 
+type AuthService interface {
+	VerifyPrincipalAndSetContext(tokenOrRawHeader string, c *gin.Context) error
+}
+
+func NewNoopAuthService() AuthService {
+	return &noopAuthService{}
+}
+
+type noopAuthService struct{}
+
+func (a *noopAuthService) VerifyPrincipalAndSetContext(tokenOrRawHeader string, c *gin.Context) error {
+	return nil
+}
+
 func ConfigureAndStartHttpServer(
 	lc fx.Lifecycle,
 	config Configuration,
@@ -180,7 +194,7 @@ func ConfigureAndStartHttpServer(
 	ms *metrics.Metrics,
 	serverControllers controllers,
 	managementControllers managementControllers,
-	ps *iam.ArmoryCloudPrincipalService,
+	as AuthService,
 	md metadata.ApplicationMetadata,
 	is *info.InfoService,
 ) error {
@@ -190,18 +204,18 @@ func ConfigureAndStartHttpServer(
 		var controllers []IController
 		controllers = append(controllers, serverControllers.Controllers...)
 		controllers = append(controllers, managementControllers.Controllers...)
-		err := configureServer("http + management", lc, config.HTTP, config.RequestLogging, ps, logger, ms, md, is, controllers...)
+		err := configureServer("http + management", lc, config.HTTP, config.RequestLogging, as, logger, ms, md, is, controllers...)
 		if err != nil {
 			return err
 		}
 		return nil
 	}
 
-	err := configureServer("http", lc, config.HTTP, config.RequestLogging, ps, logger, ms, md, is, serverControllers.Controllers...)
+	err := configureServer("http", lc, config.HTTP, config.RequestLogging, as, logger, ms, md, is, serverControllers.Controllers...)
 	if err != nil {
 		return err
 	}
-	err = configureServer("management", lc, config.Management, config.RequestLogging, ps, logger, ms, md, is, managementControllers.Controllers...)
+	err = configureServer("management", lc, config.Management, config.RequestLogging, as, logger, ms, md, is, managementControllers.Controllers...)
 	if err != nil {
 		return err
 	}
@@ -213,7 +227,7 @@ func configureServer(
 	lc fx.Lifecycle,
 	httpConfig armoryhttp.HTTP,
 	requestLoggingConfig RequestLoggingConfiguration,
-	ps *iam.ArmoryCloudPrincipalService,
+	as AuthService,
 	logger *zap.SugaredLogger,
 	ms *metrics.Metrics,
 	md metadata.ApplicationMetadata,
@@ -237,7 +251,7 @@ func configureServer(
 
 	authNotEnforcedGroup := g.Group("")
 	authRequiredGroup := g.Group("")
-	authRequiredGroup.Use(ginAuthMiddleware(ps, logger))
+	authRequiredGroup.Use(ginAuthMiddleware(as, logger))
 
 	handlerRegistry, err := newHandlerRegistry(name, logger, requestValidator, controllers)
 	if err != nil {
