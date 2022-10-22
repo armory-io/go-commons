@@ -39,9 +39,10 @@ type (
 	}
 
 	HTTP struct {
-		Host string
-		Port uint32
-		SSL  SSL
+		Prefix string
+		Host   string
+		Port   uint32
+		SSL    SSL
 	}
 
 	SSL struct {

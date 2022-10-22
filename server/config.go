@@ -18,8 +18,15 @@ package server
 
 import "github.com/armory-io/go-commons/http"
 
+type SPAConfiguration struct {
+	Enabled   bool
+	Prefix    string
+	Directory string
+}
+
 type Configuration struct {
 	RequestLogging RequestLoggingConfiguration
+	SPA            SPAConfiguration
 	HTTP           http.HTTP
 	Management     http.HTTP
 }
