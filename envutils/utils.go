@@ -88,5 +88,9 @@ func GetApplicationLoggingType() string {
 
 // GetDeploymentId Fetches the armory deployment id, if set
 func GetDeploymentId() string {
-	return os.Getenv(armoryDeploymentId)
+	depId := os.Getenv(armoryDeploymentId)
+	if depId == "" {
+		depId = "unset"
+	}
+	return depId
 }
