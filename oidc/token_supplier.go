@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package iam
+package oidc
 
 import (
 	"encoding/json"
