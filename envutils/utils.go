@@ -31,6 +31,7 @@ const (
 	applicationEnv           = "APPLICATION_ENVIRONMENT"
 	applicationVersion       = "APPLICATION_VERSION"
 	LoggerType               = "LOGGER_TYPE"
+	LoggerLevel              = "LOGGER_LEVEL"
 	local                    = "local"
 )
 
@@ -84,6 +85,11 @@ func GetApplicationVersion() string {
 // GetApplicationLoggingType returns the logging type env var if set
 func GetApplicationLoggingType() string {
 	return os.Getenv(LoggerType)
+}
+
+// GetApplicationLoggingLevel returns the logging type env var if set
+func GetApplicationLoggingLevel() string {
+	return os.Getenv(LoggerLevel)
 }
 
 // GetDeploymentId Fetches the armory deployment id, if set
