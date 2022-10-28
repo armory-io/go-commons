@@ -18,6 +18,7 @@ package metrics
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/armory-io/go-commons/metadata"
 	"github.com/prometheus/client_golang/prometheus"
@@ -103,7 +104,9 @@ func New(lc fx.Lifecycle, log *zap.SugaredLogger, conf Configuration, app metada
 		OnStart: func(context.Context) error {
 			go func() {
 				if err := server.ListenAndServe(); err != nil {
-					log.Fatalf("Failed to start metrics server: %s", err)
+					if !errors.Is(err, http.ErrServerClosed) {
+						log.Fatalf("Failed to start metrics server: %s", err)
+					}
 				}
 			}()
 			return nil

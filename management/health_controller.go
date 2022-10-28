@@ -70,7 +70,7 @@ func (c *HealthController) readinessCheckHandler(_ context.Context, _ server.Voi
 	statusCode := http.StatusServiceUnavailable
 	status := "unavailable"
 	isReady := true
-	var info map[string]any
+	var info = make(map[string]any)
 	for _, indicator := range c.healthIndicators {
 		health := indicator.Health()
 		if !health.Ready {
@@ -100,7 +100,7 @@ func (c *HealthController) livenessCheckHandler(_ context.Context, _ server.Void
 	statusCode := http.StatusServiceUnavailable
 	status := "unavailable"
 	isAlive := true
-	var info map[string]any
+	var info = make(map[string]any)
 	for _, indicator := range c.healthIndicators {
 		health := indicator.Health()
 		if !health.Alive {

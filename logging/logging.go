@@ -37,19 +37,24 @@ const (
 func ArmoryLoggerProvider(appMd metadata.ApplicationMetadata) (*zap.Logger, error) {
 	loggerOptions := armoryStdLogOpt()
 
+	level, err := zapcore.ParseLevel(appMd.LoggingLevel)
+	if err != nil {
+		level = zapcore.InfoLevel
+	}
+
 	switch strings.ToLower(appMd.LoggingType) {
 	case "json":
 		return createJSONLogger(appMd, loggerOptions)
 	case "console":
 		baseLogFields := getProductionLoggerFields(appMd)
 		loggerOptions = append(loggerOptions, zap.Fields(baseLogFields...))
-		return createArmoryConsoleLogger(loggerOptions, zapcore.InfoLevel)
+		return createArmoryConsoleLogger(loggerOptions, level)
 	default:
 		switch strings.ToLower(appMd.Environment) {
 		case "production", "prod", "staging", "stage":
 			return createJSONLogger(appMd, loggerOptions)
 		default:
-			return createArmoryConsoleLogger(loggerOptions, zapcore.InfoLevel)
+			return createArmoryConsoleLogger(loggerOptions, level)
 		}
 	}
 }

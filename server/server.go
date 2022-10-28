@@ -19,6 +19,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	armoryhttp "github.com/armory-io/go-commons/http"
 	"github.com/armory-io/go-commons/iam"
@@ -279,7 +280,9 @@ func configureServer(
 			logger.Infof("Starting %s server at: h: %s, p: %d, ssl: %t", name, httpConfig.Host, httpConfig.Port, httpConfig.SSL.Enabled)
 			go func() {
 				if err := server.Start(g); err != nil {
-					logger.Fatalf("Failed to start server: %s", err)
+					if !errors.Is(err, http.ErrServerClosed) {
+						logger.Fatalf("Failed to start server: %s", err)
+					}
 				}
 			}()
 			return nil
