@@ -40,6 +40,7 @@ import (
 	"github.com/armory-io/go-commons/maputils"
 	"github.com/armory-io/go-commons/secrets"
 	"github.com/cbroglie/mustache"
+	"github.com/fatih/color"
 	"github.com/mitchellh/mapstructure"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
@@ -273,7 +274,7 @@ func loadFileBasedConfigurationSources(
 				continue
 			}
 
-			log.Infof("successfully loaded candidate: %s", candidate)
+			log.Infof(color.New(color.FgHiGreen, color.Bold).Sprintf("successfully loaded config source: %s", color.New(color.Underline).Sprintf(candidate)))
 			sources = append(sources, config)
 			candidateFound = true
 			break
