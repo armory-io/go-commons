@@ -59,7 +59,7 @@ var ModuleV2 = fx.Options(
 	management.Module,
 	tracing.Module,
 	fx.Provide(
-		metrics.New,
+		metrics.NewSvc,
 		iam.New,
 		info.New,
 		func(ps *iam.ArmoryCloudPrincipalService) server.AuthService {
