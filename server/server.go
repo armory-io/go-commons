@@ -31,6 +31,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/mitchellh/mapstructure"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
@@ -205,18 +206,18 @@ func ConfigureAndStartHttpServer(
 		var controllers []IController
 		controllers = append(controllers, serverControllers.Controllers...)
 		controllers = append(controllers, managementControllers.Controllers...)
-		err := configureServer("http", lc, config.HTTP, config.RequestLogging, config.SPA, as, logger, ms, md, is, controllers...)
+		err := configureServer("http", lc, config.HTTP, config.RequestLogging, config.SPA, as, logger, ms, md, is, true, controllers...)
 		if err != nil {
 			return err
 		}
 		return nil
 	}
 
-	err := configureServer("http", lc, config.HTTP, config.RequestLogging, config.SPA, as, logger, ms, md, is, serverControllers.Controllers...)
+	err := configureServer("http", lc, config.HTTP, config.RequestLogging, config.SPA, as, logger, ms, md, is, false, serverControllers.Controllers...)
 	if err != nil {
 		return err
 	}
-	err = configureServer("management", lc, config.Management, config.RequestLogging, config.SPA, as, logger, ms, md, is, managementControllers.Controllers...)
+	err = configureServer("management", lc, config.Management, config.RequestLogging, config.SPA, as, logger, ms, md, is, true, managementControllers.Controllers...)
 	if err != nil {
 		return err
 	}
@@ -234,6 +235,7 @@ func configureServer(
 	ms *metrics.Metrics,
 	md metadata.ApplicationMetadata,
 	is *info.InfoService,
+	handlesManagement bool,
 	controllers ...IController,
 ) error {
 	g := gin.New()
@@ -271,6 +273,11 @@ func configureServer(
 		AuthNotEnforcedGroup: authNotEnforcedGroup,
 	}); err != nil {
 		return err
+	}
+
+	// the prom handler has a bunch of logic that I don't want to have to port, so we will not make a controller for it.
+	if handlesManagement {
+		authNotEnforcedGroup.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	}
 
 	server := armoryhttp.NewServer(armoryhttp.Configuration{HTTP: httpConfig})
