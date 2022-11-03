@@ -58,7 +58,7 @@ type Metrics struct {
 	rootScope tally.Scope
 }
 
-// NewSvc creates an instance of the metrics service but does not start a server for metrics scrapping.
+// NewSvc creates an instance of the metrics service but does not start a server for metrics scraping.
 // Serving the open metrics endpoint is handled by a management endpoint, see the management package.
 func NewSvc(lc fx.Lifecycle, app metadata.ApplicationMetadata) *Metrics {
 	registerer := prometheus.DefaultRegisterer
