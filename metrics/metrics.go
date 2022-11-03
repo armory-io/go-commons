@@ -68,11 +68,12 @@ func NewSvc(lc fx.Lifecycle, app metadata.ApplicationMetadata) *Metrics {
 		Separator:       tallyprom.DefaultSeparator,
 		SanitizeOptions: &sanitizeOptions,
 		Tags: map[string]string{
-			"appName":     app.Name,
-			"version":     app.Version,
-			"hostname":    app.Hostname,
-			"environment": app.Environment,
-			"replicaset":  app.Replicaset,
+			"appName":      app.Name,
+			"version":      app.Version,
+			"hostname":     app.Hostname,
+			"environment":  app.Environment,
+			"replicaset":   app.Replicaset,
+			"deploymentId": app.DeploymentId,
 		},
 	}
 	scope, closer := tally.NewRootScope(scopeOpts, time.Second)
