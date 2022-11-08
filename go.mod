@@ -7,6 +7,7 @@ require (
 	github.com/auth0/go-auth0 v0.10.1
 	github.com/aws/aws-sdk-go v1.44.61
 	github.com/cbroglie/mustache v1.4.0
+	github.com/creasty/defaults v1.6.0
 	github.com/elnormous/contenttype v1.0.3
 	github.com/fatih/color v1.7.0
 	github.com/gin-contrib/static v0.0.1

@@ -230,6 +230,33 @@ func (s *ServerTestSuite) TestGinHOF() {
 		assert.Equal(t, errFailedToUnmarshalRequest.HttpStatusCode, recorder.Result().StatusCode)
 	})
 
+	s.T().Run("ginHOF should fill in request body struct defaults", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		stubURL, _ := url.ParseRequestURI("https://example.com/some-endpoint")
+		c.Request = &http.Request{
+			Header: map[string][]string{"Accept": {"application/json"}, "Content-Type": {"application/json"}},
+			Method: http.MethodPost,
+			URL:    stubURL,
+			Body:   io.NopCloser(strings.NewReader("{}")),
+		}
+
+		var actual string
+		handlerFn := func(ctx context.Context, request struct {
+			Name string `json:"name" default:"fill-me-in"`
+		}) (*Response[Void], serr.Error) {
+			actual = request.Name
+			return nil, nil
+		}
+
+		ginHOF(handlerFn, &handlerDTO{
+			StatusCode: http.StatusNoContent,
+			AuthOptOut: true,
+		}, validator.New(), s.log)(c)
+
+		s.Equal("fill-me-in", actual)
+	})
+
 	s.T().Run("ginHOF should handle return the expected API Error if the request method isn't handleable", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(recorder)

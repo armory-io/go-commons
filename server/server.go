@@ -27,6 +27,7 @@ import (
 	"github.com/armory-io/go-commons/metadata"
 	"github.com/armory-io/go-commons/metrics"
 	"github.com/armory-io/go-commons/server/serr"
+	"github.com/creasty/defaults"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
@@ -481,6 +482,10 @@ var (
 		Message:        "Failed to unmarshal request",
 		HttpStatusCode: http.StatusBadRequest,
 	}
+	errFailedToSetRequestDefaults = serr.APIError{
+		Message:        "Failed to read request",
+		HttpStatusCode: http.StatusInternalServerError,
+	}
 	errFailedToReadRequest = serr.APIError{
 		Message:        "Failed to read request",
 		HttpStatusCode: http.StatusBadRequest,
@@ -551,6 +556,10 @@ func ginHOF[REQUEST, RESPONSE any](
 				}
 			}
 
+			if err := defaults.Set(&req); err != nil {
+				apiError = serr.NewErrorResponseFromApiError(errFailedToSetRequestDefaults, serr.WithCause(err))
+				break
+			}
 			response, apiError = handlerFn(c.Request.Context(), req)
 			break
 		default:
