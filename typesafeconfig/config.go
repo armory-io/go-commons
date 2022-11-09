@@ -153,7 +153,7 @@ func ResolveConfiguration[T any](log *zap.SugaredLogger, options ...Option) (*T,
 	)
 	untypedConfig := maputils.MergeSources(sources...)
 	// hydrate secret tokens
-	if err = resolveSecrets(untypedConfig); err != nil {
+	if err = resolveSecrets(untypedConfig, log); err != nil {
 		return nil, err
 	}
 	// hydrate template tokens
@@ -218,16 +218,17 @@ func resolveTemplates(config map[string]any) error {
 	})
 }
 
-func resolveSecrets(config map[string]any) error {
+func resolveSecrets(config map[string]any, log *zap.SugaredLogger) error {
 	return recurseStringValuesAndMap(config, func(value string) (string, error) {
 		if secrets.IsEncryptedSecret(value) {
+			log.Infof("Attempting to resolve actual value for: '%s'", color.New(color.FgHiGreen).Sprintf(value))
 			d, err := secrets.NewDecrypter(context.Background(), value)
 			if err != nil {
-				return value, err
+				return value, multierr.Append(fmt.Errorf("failed to create decrypter for '%s'", value), err)
 			}
 			plainTextValue, err := d.Decrypt()
 			if err != nil {
-				return value, err
+				return value, multierr.Append(fmt.Errorf("failed to decrypt '%s'", value), err)
 			}
 			return plainTextValue, nil
 		}
@@ -274,7 +275,7 @@ func loadFileBasedConfigurationSources(
 				continue
 			}
 
-			log.Infof(color.New(color.FgHiGreen, color.Bold).Sprintf("successfully loaded config source: %s", color.New(color.Underline).Sprintf(candidate)))
+			log.Infof("successfully loaded config source: %s", color.New(color.FgHiGreen).Sprintf(candidate))
 			sources = append(sources, config)
 			candidateFound = true
 			break
