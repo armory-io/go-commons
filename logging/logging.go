@@ -46,6 +46,8 @@ func ArmoryLoggerProvider(appMd metadata.ApplicationMetadata) (*zap.Logger, erro
 	case "json":
 		return createJSONLogger(appMd, loggerOptions)
 	case "console":
+		return createArmoryConsoleLogger(loggerOptions, level)
+	case "console-wide":
 		baseLogFields := getProductionLoggerFields(appMd)
 		loggerOptions = append(loggerOptions, zap.Fields(baseLogFields...))
 		return createArmoryConsoleLogger(loggerOptions, level)
