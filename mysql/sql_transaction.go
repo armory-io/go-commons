@@ -27,11 +27,11 @@ var (
 	ErrTxAlreadyClosed = errors.New("transaction is already closed")
 	TxModule           = fx.Module(
 		"mysqlTx",
-		fx.Provide(initializeModule),
+		fx.Provide(InitializeModule),
 	)
 )
 
-func initializeModule(db *sql.DB, log *zap.SugaredLogger) TransactionScopeBuilder {
+func InitializeModule(db *sql.DB, log *zap.SugaredLogger) TransactionScopeBuilder {
 
 	return func(ctx context.Context, isolationLevel sql.IsolationLevel) (TransactionScopeWrapper, error) {
 		var targetCtx contextWithTx
