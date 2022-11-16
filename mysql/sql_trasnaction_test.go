@@ -33,7 +33,7 @@ func TestSqlTransaction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	txScopeBuilder := initializeModule(mysqlDb, logger)
+	txScopeBuilder := InitializeModule(mysqlDb, logger)
 
 	defer mysqlDb.Close()
 
