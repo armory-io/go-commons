@@ -45,6 +45,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"unsafe"
 )
 
 type (
@@ -363,11 +364,6 @@ func validateRequestBody[T any](req T, v *validator.Validate) serr.Error {
 				serr.WithCause(vErr),
 			)
 		}
-
-		return serr.NewErrorResponseFromApiError(serr.APIError{
-			Message:        "Failed to validate request",
-			HttpStatusCode: http.StatusBadRequest,
-		}, serr.WithCause(err))
 	}
 	return nil
 }
@@ -558,29 +554,9 @@ func ginHOF[REQUEST, RESPONSE any](
 			response, apiError = handlerFn(c.Request.Context(), req)
 			break
 		case http.MethodPost, http.MethodPut, http.MethodPatch:
-			var req REQUEST
-			if reflect.TypeOf(req) != nil && reflect.TypeOf(req).String() != "server.Void" {
-				if c.Request.Body == nil {
-					apiError = serr.NewErrorResponseFromApiError(errBodyRequired)
-					break
-				}
-				b, err := io.ReadAll(c.Request.Body)
-				if err != nil {
-					apiError = serr.NewErrorResponseFromApiError(errFailedToReadRequest, serr.WithCause(err))
-					break
-				}
-				if err := json.Unmarshal(b, &req); err != nil {
-					apiError = handleUnmarshalError(b, err)
-					break
-				}
-
-				if apiError = validateRequestBody(req, requestValidator); apiError != nil {
-					break
-				}
-			}
-
-			if err := defaults.Set(&req); err != nil {
-				apiError = serr.NewErrorResponseFromApiError(errFailedToSetRequestDefaults, serr.WithCause(err))
+			req, err := extractRequest[REQUEST](c, requestValidator)
+			if err != nil {
+				apiError = err
 				break
 			}
 			response, apiError = handlerFn(c.Request.Context(), req)
@@ -596,8 +572,9 @@ func ginHOF[REQUEST, RESPONSE any](
 		}
 
 		var r RESPONSE
+		responseType := reflect.TypeOf(r)
 		if response == nil || reflect.ValueOf(&response.Body).Elem().IsZero() {
-			if reflect.TypeOf(r) != nil && reflect.TypeOf(r).String() == "server.Void" {
+			if responseType != nil && responseType == voidType {
 				c.Status(http.StatusNoContent)
 				_, _ = c.Writer.Write([]byte{})
 				return
@@ -677,6 +654,46 @@ func handleUnmarshalError(bytes []byte, err error) serr.Error {
 	}
 
 	return serr.NewErrorResponseFromApiError(returnErr, serr.WithCause(err))
+}
+
+var (
+	byteArrayType = reflect.TypeOf([]byte(nil))
+	voidType      = reflect.TypeOf(Void{})
+)
+
+func extractRequest[REQUEST any](c *gin.Context, requestValidator *validator.Validate) (REQUEST, serr.Error) {
+	var req REQUEST
+	reqType := reflect.TypeOf(req)
+	if reqType == nil || reqType == voidType {
+		return req, nil
+	}
+
+	if c.Request.Body == nil {
+		return req, serr.NewErrorResponseFromApiError(errBodyRequired)
+	}
+
+	b, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return req, serr.NewErrorResponseFromApiError(errFailedToReadRequest, serr.WithCause(err))
+	}
+
+	if reqType == byteArrayType { // if the handler has specified that it wants body []byte, we will give it the raw bytes.
+		return *(*REQUEST)(unsafe.Pointer(&b)), nil
+	}
+
+	if err := json.Unmarshal(b, &req); err != nil {
+		return req, handleUnmarshalError(b, err)
+	}
+
+	if apiError := validateRequestBody(req, requestValidator); apiError != nil {
+		return req, apiError
+	}
+
+	if err := defaults.Set(&req); err != nil {
+		return req, serr.NewErrorResponseFromApiError(errFailedToSetRequestDefaults, serr.WithCause(err))
+	}
+
+	return req, nil
 }
 
 // writeAndLogApiErrorThenAbort a helper function that will take a serr.Error and ensure that it is logged and a properly
