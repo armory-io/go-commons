@@ -211,7 +211,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 			Header: map[string][]string{"Accept": {"application/json"}, "Content-Type": {"application/json"}},
 			Method: http.MethodPost,
 			URL:    stubURL,
-			Body:   io.NopCloser(strings.NewReader("{notvalidjson")),
+			Body:   io.NopCloser(strings.NewReader("{ \"foo\":\"bar\",\n \n\"invalidJson\":\"not closed")),
 		}
 
 		handlerFn := func(ctx context.Context, request struct {
@@ -228,6 +228,48 @@ func (s *ServerTestSuite) TestGinHOF() {
 		apiError := ExtractApiError(t, recorder)
 		assert.Equal(t, errFailedToUnmarshalRequest.Message, apiError.Errors[0].Message)
 		assert.Equal(t, errFailedToUnmarshalRequest.HttpStatusCode, recorder.Result().StatusCode)
+		metadata := apiError.Errors[0].Metadata
+		assert.Equal(t, "unexpected end of JSON input", metadata["reason"])
+		assert.Equal(t, float64(25), metadata["column"])
+		assert.Equal(t, float64(2), metadata["line"])
+		assert.Equal(t, float64(42), metadata["offset"])
+	})
+
+	s.T().Run("ginHOF should handle return the expected API Error if the request body doesn't match the desired data types", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		stubURL, _ := url.ParseRequestURI("https://example.com/some-endpoint")
+		c.Request = &http.Request{
+			Header: map[string][]string{"Accept": {"application/json"}, "Content-Type": {"application/json"}},
+			Method: http.MethodPost,
+			URL:    stubURL,
+			Body:   io.NopCloser(strings.NewReader("{\n\"body\": {\n \"value\": \"ten\"}\n}")),
+		}
+
+		handlerFn := func(ctx context.Context, request struct {
+			Body struct {
+				IntegerValue int `json:"value" validate:"required"`
+			}
+		}) (*Response[Void], serr.Error) {
+			return nil, nil
+		}
+
+		ginHOF(handlerFn, &handlerDTO{
+			StatusCode: http.StatusNoContent,
+			AuthOptOut: true,
+		}, validator.New(), s.log)(c)
+
+		apiError := ExtractApiError(t, recorder)
+		assert.Equal(t, "Failed to unmarshal request", apiError.Errors[0].Message)
+		assert.Equal(t, http.StatusBadRequest, recorder.Result().StatusCode)
+		metadata := apiError.Errors[0].Metadata
+		assert.Equal(t, "cannot unmarshal data", metadata["reason"])
+		assert.Equal(t, float64(15), metadata["column"])
+		assert.Equal(t, float64(2), metadata["line"])
+		assert.Equal(t, float64(27), metadata["offset"])
+		assert.Equal(t, "int", metadata["expectedType"])
+		assert.Equal(t, "string", metadata["providedType"])
+		assert.Equal(t, "Body.value", metadata["path"])
 	})
 
 	s.T().Run("ginHOF should fill in request body struct defaults", func(t *testing.T) {

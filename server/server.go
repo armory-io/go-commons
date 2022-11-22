@@ -33,6 +33,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/mitchellh/mapstructure"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/samber/lo"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
@@ -547,7 +548,7 @@ func ginHOF[REQUEST, RESPONSE any](
 					break
 				}
 				if err := json.Unmarshal(b, &req); err != nil {
-					apiError = serr.NewErrorResponseFromApiError(errFailedToUnmarshalRequest, serr.WithCause(err))
+					apiError = handleUnmarshalError(b, err)
 					break
 				}
 
@@ -609,6 +610,51 @@ func ginHOF[REQUEST, RESPONSE any](
 			return
 		}
 	}
+}
+
+func handleUnmarshalError(bytes []byte, err error) serr.Error {
+	var meta map[string]any = nil
+	offset := 0
+
+	syntaxError, ok := err.(*json.SyntaxError)
+	if ok {
+		meta = make(map[string]any)
+		offset = int(syntaxError.Offset)
+		meta["reason"] = err.Error()
+	}
+	unmarshalError, ok := err.(*json.UnmarshalTypeError)
+	if ok {
+		meta = make(map[string]any)
+		offset = int(unmarshalError.Offset)
+		meta["path"] = unmarshalError.Struct + lo.Ternary(unmarshalError.Struct == "" || unmarshalError.Field == "", "", ".") + unmarshalError.Field
+		meta["providedType"] = unmarshalError.Value
+		meta["expectedType"] = unmarshalError.Type.Name()
+		meta["reason"] = "cannot unmarshal data"
+	}
+
+	if nil != meta {
+		meta["offset"] = offset
+		line := 0
+		column := 0
+		for _, c := range bytes[:offset] {
+			column++
+			if c == '\n' {
+				line++
+				column = 0
+			}
+		}
+		meta["line"] = line
+		meta["column"] = column
+	}
+
+	returnErr := serr.APIError{
+		Message:        errFailedToUnmarshalRequest.Message,
+		Metadata:       meta,
+		HttpStatusCode: errFailedToUnmarshalRequest.HttpStatusCode,
+		Code:           errFailedToUnmarshalRequest.Code,
+	}
+
+	return serr.NewErrorResponseFromApiError(returnErr, serr.WithCause(err))
 }
 
 // writeAndLogApiErrorThenAbort a helper function that will take a serr.Error and ensure that it is logged and a properly
