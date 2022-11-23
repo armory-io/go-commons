@@ -31,16 +31,17 @@ const (
 )
 
 type ArmoryCloudPrincipal struct {
-	Type        PrincipalType `json:"type"`
-	Name        string        `json:"name"`
-	OrgId       string        `json:"orgId"`
-	OrgName     string        `json:"orgName"`
-	EnvId       string        `json:"envId"`
-	ArmoryAdmin bool          `json:"armoryAdmin"`
-	Subject     string        `json:"sub"`
-	Issuer      string        `json:"iss"`
-	Scopes      []string      `json:"scopes"`
-	Roles       []string      `json:"roles"`
+	Type            PrincipalType `json:"type"`
+	Name            string        `json:"name"`
+	OrgId           string        `json:"orgId"`
+	OrgName         string        `json:"orgName"`
+	EnvId           string        `json:"envId"`
+	ArmoryAdmin     bool          `json:"armoryAdmin"`
+	Subject         string        `json:"sub"`
+	Issuer          string        `json:"iss"`
+	AuthorizedParty string        `json:"azp"`
+	Scopes          []string      `json:"scopes"`
+	Roles           []string      `json:"roles"`
 }
 
 func (p *ArmoryCloudPrincipal) Tenant() string {
