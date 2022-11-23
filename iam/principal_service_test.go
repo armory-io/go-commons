@@ -21,19 +21,21 @@ func TestTokenToPrincipal(t *testing.T) {
 		},
 		"iss": "https://test.issuer/",
 		"sub": "test_subject_123",
+		"azp": "authorized party",
 	}
 	scopes := "openid profile email"
 	principal, err := tokenToPrincipal(token, scopes)
 	assert.NoError(t, err)
 	assert.Equal(t, ArmoryCloudPrincipal{
-		Name:        "frankie",
-		Type:        User,
-		OrgId:       "org-id",
-		OrgName:     "dogz that deploy",
-		EnvId:       "env-id",
-		ArmoryAdmin: false,
-		Subject:     "test_subject_123",
-		Issuer:      "https://test.issuer/",
+		Name:            "frankie",
+		Type:            User,
+		OrgId:           "org-id",
+		OrgName:         "dogz that deploy",
+		EnvId:           "env-id",
+		ArmoryAdmin:     false,
+		Subject:         "test_subject_123",
+		Issuer:          "https://test.issuer/",
+		AuthorizedParty: "authorized party",
 		Scopes: []string{
 			"api:organization:full",
 			"openid",

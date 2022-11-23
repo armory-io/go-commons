@@ -31,16 +31,30 @@ const (
 )
 
 type ArmoryCloudPrincipal struct {
-	Type        PrincipalType `json:"type"`
-	Name        string        `json:"name"`
-	OrgId       string        `json:"orgId"`
-	OrgName     string        `json:"orgName"`
-	EnvId       string        `json:"envId"`
-	ArmoryAdmin bool          `json:"armoryAdmin"`
-	Subject     string        `json:"sub"`
-	Issuer      string        `json:"iss"`
-	Scopes      []string      `json:"scopes"`
-	Roles       []string      `json:"roles"`
+
+	//  PrincipalType The type of principal, user or machine
+	Type PrincipalType `json:"type"`
+	// Name  This is the principals name For user types this is will the users email address For machine  types this will be the identifier of the OIDC application that represents the machine
+	Name string `json:"name"`
+	// OrgId The guid for the organization the principal is a member of
+	OrgId string `json:"orgId"`
+	// OrgName The human-readable name of the organization
+	OrgName string `json:"orgName"`
+	// EnvId The guid for the environment (aka tenant) that this principal is authorized for
+	EnvId string `json:"envId"`
+	// ArmoryAdmin A flag to determine if the principal is an armory admin principal and can do dangerous x-org and or x-env actions.
+	ArmoryAdmin bool `json:"armoryAdmin"`
+	// Subject  The "sub" (subject) claim identifies the principal that is the subject of the JWT.  The "sub" value is a case-sensitive string containing a StringOrURI value.
+	Subject string `json:"sub"`
+	/// Issuer The "iss" (issuer) claim identifies the principal that issued the JWT.
+	Issuer string `json:"iss"`
+	// AuthorizedParty OPTIONAL. Authorized party - the party to which the ID Token was issued. If present, it MUST contain the OAuth 2.0 Client ID of this party. This Claim is only needed when the ID Token has
+	// a single audience value and that audience is different from the authorized party. It MAY be included even when the authorized party is the same as the sole audience. The azp value is a case-sensitive string containing a StringOrURI value.
+	AuthorizedParty string `json:"azp"`
+	// Scopes A list of scopes that was set by the authorization server such as use:adminApi
+	Scopes []string `json:"scopes"`
+	// Roles List of groups that a principal belongs to
+	Roles []string `json:"roles"`
 }
 
 func (p *ArmoryCloudPrincipal) Tenant() string {
