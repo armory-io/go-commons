@@ -26,9 +26,10 @@ import (
 )
 
 const (
-	scopeClaim = "scope"
-	subject    = "sub"
-	issuer     = "iss"
+	scopeClaim      = "scope"
+	subject         = "sub"
+	issuer          = "iss"
+	authorizedParty = "azp"
 )
 
 type JwtFetcher interface {
@@ -82,6 +83,10 @@ func (j *JwtToken) Fetch(token []byte) (interface{}, interface{}, error) {
 	}
 	untypedPrincipal.(map[string]interface{})[subject] = parsedJwt.Subject()
 	untypedPrincipal.(map[string]interface{})[issuer] = parsedJwt.Issuer()
+	azp, provided := parsedJwt.Get(authorizedParty)
+	if provided {
+		untypedPrincipal.(map[string]interface{})[authorizedParty] = azp
+	}
 
 	scopes, _ := parsedJwt.Get(scopeClaim)
 

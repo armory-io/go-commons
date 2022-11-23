@@ -1,7 +1,6 @@
 package iam
 
 import (
-	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -36,7 +35,7 @@ func TestTokenToPrincipal(t *testing.T) {
 		ArmoryAdmin:     false,
 		Subject:         "test_subject_123",
 		Issuer:          "https://test.issuer/",
-		AuthorizedParty: lo.ToPtr("authorized party"),
+		AuthorizedParty: "authorized party",
 		Scopes: []string{
 			"api:organization:full",
 			"openid",
