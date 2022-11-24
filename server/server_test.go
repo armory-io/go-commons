@@ -424,6 +424,40 @@ func (s *ServerTestSuite) TestGinHOF() {
 		apiError := ExtractApiError(t, recorder)
 		assert.Equal(t, errServerFailedToProduceExpectedResponse.Message, apiError.Errors[0].Message)
 	})
+
+	s.T().Run("ginHOF should recover from a panic and returned a well-formed error", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		stubURL, _ := url.ParseRequestURI("https://example.com/some-endpoint")
+		c.Request = &http.Request{
+			Header: map[string][]string{},
+			Method: http.MethodGet,
+			URL:    stubURL,
+		}
+
+		handlerFn := func(ctx context.Context, _ Void) (*Response[string], serr.Error) {
+			unsafeStruct := &Widget{}
+			name := unsafeStruct.subWidget.name // <- Should cause NPE Panic
+			return SimpleResponse(name), nil
+		}
+
+		ginHOF(handlerFn, &handlerDTO{
+			StatusCode: http.StatusOK,
+			AuthOptOut: true,
+		}, nil, s.log)(c)
+
+		assert.Equal(t, errInternalServerError.HttpStatusCode, recorder.Result().StatusCode)
+		apiError := ExtractApiError(t, recorder)
+		assert.Equal(t, errInternalServerError.Message, apiError.Errors[0].Message)
+	})
+}
+
+type Widget struct {
+	subWidget *SubWidget
+}
+
+type SubWidget struct {
+	name string
 }
 
 func ExtractApiError(t *testing.T, recorder *httptest.ResponseRecorder) *serr.ResponseContract {

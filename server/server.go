@@ -499,6 +499,10 @@ var (
 		Message:        "Failed to Produce Response Body",
 		HttpStatusCode: http.StatusInternalServerError,
 	}
+	errInternalServerError = serr.APIError{
+		Message:        "The server was not able to handle the request",
+		HttpStatusCode: http.StatusInternalServerError,
+	}
 )
 
 // ginHOF creates Higher Order gin Handler Function, that wraps the IController handler function with a function that deals with the common request/response logic
@@ -509,6 +513,23 @@ func ginHOF[REQUEST, RESPONSE any](
 	logger *zap.SugaredLogger,
 ) gin.HandlerFunc {
 	return func(c *gin.Context) {
+
+		// recover from panics and return a well-formed error and log the details
+		defer func() {
+			if r := recover(); r != nil {
+				cause := fmt.Sprintf("%s", r)
+				if cause == "" {
+					cause = "panic cause was nil"
+				}
+				writeAndLogApiErrorThenAbort(c, serr.NewErrorResponseFromApiError(
+					errInternalServerError,
+					serr.WithErrorMessage("The handler panicked"),
+					serr.WithStackTraceLoggingBehavior(serr.ForceStackTrace),
+					serr.WithCause(fmt.Errorf(cause)),
+				), logger)
+			}
+		}()
+
 		if !handler.AuthOptOut {
 			if err := authorizeRequest(c.Request.Context(), handler); err != nil {
 				writeAndLogApiErrorThenAbort(c, err, logger)
