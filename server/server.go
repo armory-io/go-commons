@@ -525,6 +525,7 @@ func ginHOF[REQUEST, RESPONSE any](
 					errInternalServerError,
 					serr.WithErrorMessage("The handler panicked"),
 					serr.WithStackTraceLoggingBehavior(serr.ForceStackTrace),
+					serr.WithFrameSkips(6),
 					serr.WithCause(fmt.Errorf(cause)),
 				), logger)
 			}
