@@ -60,7 +60,7 @@ type Metrics struct {
 
 // NewSvc creates an instance of the metrics service but does not start a server for metrics scraping.
 // Serving the open metrics endpoint is handled by a management endpoint, see the management package.
-func NewSvc(lc fx.Lifecycle, app metadata.ApplicationMetadata) *Metrics {
+func NewSvc(lc fx.Lifecycle, app metadata.ApplicationMetadata) MetricsSvc {
 	registerer := prometheus.DefaultRegisterer
 	reporter := tallyprom.NewReporter(tallyprom.Options{Registerer: registerer})
 	scopeOpts := tally.ScopeOptions{
@@ -93,7 +93,7 @@ func NewSvc(lc fx.Lifecycle, app metadata.ApplicationMetadata) *Metrics {
 
 // New creates a metrics service that by defaults serves metrics on :3001/metrics, but is separate from the management endpoints
 // Deprecated: this will be deleted once all apps are on the server module, where metrics will be served on the management port (defaults to the server port unless you change it)
-func New(lc fx.Lifecycle, log *zap.SugaredLogger, conf Configuration, app metadata.ApplicationMetadata) *Metrics {
+func New(lc fx.Lifecycle, log *zap.SugaredLogger, conf Configuration, app metadata.ApplicationMetadata) MetricsSvc {
 	path := conf.Path
 	port := conf.Port
 
