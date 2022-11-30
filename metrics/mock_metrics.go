@@ -90,6 +90,20 @@ func (mr *MockMetricsSvcMockRecorder) GaugeWithTags(name, tags interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GaugeWithTags", reflect.TypeOf((*MockMetricsSvc)(nil).GaugeWithTags), name, tags)
 }
 
+// GetRootScope mocks base method.
+func (m *MockMetricsSvc) GetRootScope() tally.Scope {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRootScope")
+	ret0, _ := ret[0].(tally.Scope)
+	return ret0
+}
+
+// GetRootScope indicates an expected call of GetRootScope.
+func (mr *MockMetricsSvcMockRecorder) GetRootScope() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRootScope", reflect.TypeOf((*MockMetricsSvc)(nil).GetRootScope))
+}
+
 // Histogram mocks base method.
 func (m *MockMetricsSvc) Histogram(name string, buckets tally.Buckets) tally.Histogram {
 	m.ctrl.T.Helper()

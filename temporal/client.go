@@ -35,7 +35,7 @@ var Module = fx.Module(
 	fx.Provide(ArmoryTemporalProvider),
 )
 
-func ArmoryTemporalProvider(logger *zap.SugaredLogger, settings Configuration, metricsService *metrics.Metrics) (client.Client, error) {
+func ArmoryTemporalProvider(logger *zap.SugaredLogger, settings Configuration, metricsService metrics.MetricsSvc) (client.Client, error) {
 	adapted := NewZapAdapter(logger.Desugar())
 	options, err := optionsFromSettings(adapted, settings)
 	if err != nil {

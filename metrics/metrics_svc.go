@@ -5,6 +5,7 @@ import "github.com/uber-go/tally/v4"
 //go:generate mockgen -package metrics -destination=mock_metrics.go -source=./metrics_svc.go MetricsSvc
 
 type MetricsSvc interface {
+	GetRootScope() tally.Scope
 	Counter(name string) tally.Counter
 	CounterWithTags(name string, tags map[string]string) tally.Counter
 	Gauge(name string) tally.Gauge
