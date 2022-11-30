@@ -22,7 +22,7 @@ import (
 	"time"
 )
 
-func GinHTTPMiddleware(metrics *Metrics) gin.HandlerFunc {
+func GinHTTPMiddleware(metrics MetricsSvc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
