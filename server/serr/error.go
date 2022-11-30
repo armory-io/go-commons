@@ -96,6 +96,8 @@ type apiErrorResponse struct {
 	stacktrace string
 	// origin
 	origin string
+	// frame skips
+	framesToSkip int
 }
 
 // Error
@@ -252,6 +254,13 @@ func WithStackTraceLoggingBehavior(behavior StackTraceLoggingBehavior) Option {
 	}
 }
 
+// WithFrameSkips Overrides the number of frames to skip when generating the stack trace.
+func WithFrameSkips(framesToSkip int) Option {
+	return func(aE *apiErrorResponse) {
+		aE.framesToSkip = framesToSkip
+	}
+}
+
 // NewErrorResponseFromApiError Given a Single APIError and the given Option's returns an instance of Error
 func NewErrorResponseFromApiError(error APIError, opts ...Option) Error {
 	return NewErrorResponseFromApiErrors([]APIError{error}, opts...)
@@ -259,9 +268,18 @@ func NewErrorResponseFromApiError(error APIError, opts ...Option) Error {
 
 // NewErrorResponseFromApiErrors Given multiple APIError's and the given Option's returns an instance of Error
 func NewErrorResponseFromApiErrors(errors []APIError, opts ...Option) Error {
+	aec := &apiErrorResponse{
+		stackTraceLoggingBehavior: DeferToDefaultBehavior,
+		errors:                    errors,
+		framesToSkip:              2,
+	}
+	for _, option := range opts {
+		option(aec)
+	}
+
 	// get the stacktrace and caller for the error, so it can be logged
 	// Ported from zap
-	stack := stacktrace.Capture(2, stacktrace.Full)
+	stack := stacktrace.Capture(aec.framesToSkip, stacktrace.Full)
 	defer stack.Free()
 	stackBuffer := bufferpool.Get()
 	defer stackBuffer.Free()
@@ -288,15 +306,8 @@ func NewErrorResponseFromApiErrors(errors []APIError, opts ...Option) Error {
 		sTrace = stackBuffer.String()
 	}
 
-	aec := &apiErrorResponse{
-		stackTraceLoggingBehavior: DeferToDefaultBehavior,
-		stacktrace:                sTrace,
-		errors:                    errors,
-		origin:                    origin,
-	}
-	for _, option := range opts {
-		option(aec)
-	}
+	aec.origin = origin
+	aec.stacktrace = sTrace
 
 	return aec
 }
