@@ -311,26 +311,9 @@ func writeResponse(contentType string, body any, w gin.ResponseWriter) serr.Erro
 	w.Header().Set("Content-Type", contentType)
 	switch contentType {
 	case "text/plain", "application/yaml":
-		t := reflect.TypeOf(body)
-		if t.Kind() != reflect.String {
-			return serr.NewErrorResponseFromApiError(serr.APIError{
-				Message:        "Failed to write response",
-				HttpStatusCode: http.StatusInternalServerError,
-			},
-				serr.WithErrorMessage(fmt.Sprintf("Handler specified that it produces %s but didn't return a string as the response", contentType)),
-				serr.WithExtraDetailsForLogging(serr.KVPair{
-					Key:   "actualType",
-					Value: t.String(),
-				}),
-			)
-		}
-		if _, err := w.Write([]byte(body.(string))); err != nil {
-			return serr.NewErrorResponseFromApiError(serr.APIError{
-				Message:        "Failed to write response",
-				HttpStatusCode: http.StatusInternalServerError,
-			}, serr.WithCause(err))
-		}
-		return nil
+		return writeStringResponse(contentType, body, w)
+	case "application/octet-stream":
+		return writeOctetStream(contentType, body, w)
 	default:
 		if err := json.NewEncoder(w).Encode(body); err != nil {
 			return serr.NewErrorResponseFromApiError(serr.APIError{
@@ -340,6 +323,57 @@ func writeResponse(contentType string, body any, w gin.ResponseWriter) serr.Erro
 		}
 		return nil
 	}
+}
+
+// writeOctetStream expects the body to be an io.ReadCloser, if it is, it will be copied to the response writer.
+// This can probably be refactored later, if needed to allow the body to be a byte[] or Reader vs only allowing ReadCloser.
+func writeOctetStream(contentType string, body any, w gin.ResponseWriter) serr.Error {
+	bodyContent, ok := body.(io.ReadCloser)
+	if !ok {
+		return serr.NewErrorResponseFromApiError(serr.APIError{
+			Message:        "Failed to write response",
+			HttpStatusCode: http.StatusInternalServerError,
+		},
+			serr.WithErrorMessage(fmt.Sprintf("Handler specified that it produces %s but didn't return a ReadCloser as the response", contentType)),
+		)
+	}
+
+	//goland:noinspection GoUnhandledErrorResult
+	defer bodyContent.Close()
+
+	if _, err := io.Copy(w, bodyContent); err != nil {
+		return serr.NewErrorResponseFromApiError(serr.APIError{
+			Message:        "Failed to write response",
+			HttpStatusCode: http.StatusInternalServerError,
+		},
+			serr.WithCause(err),
+			serr.WithErrorMessage("Failed to copy handler body to response writer"),
+		)
+	}
+	return nil
+}
+
+func writeStringResponse(contentType string, body any, w gin.ResponseWriter) serr.Error {
+	t := reflect.TypeOf(body)
+	if t.Kind() != reflect.String {
+		return serr.NewErrorResponseFromApiError(serr.APIError{
+			Message:        "Failed to write response",
+			HttpStatusCode: http.StatusInternalServerError,
+		},
+			serr.WithErrorMessage(fmt.Sprintf("Handler specified that it produces %s but didn't return a string as the response", contentType)),
+			serr.WithExtraDetailsForLogging(serr.KVPair{
+				Key:   "actualType",
+				Value: t.String(),
+			}),
+		)
+	}
+	if _, err := w.Write([]byte(body.(string))); err != nil {
+		return serr.NewErrorResponseFromApiError(serr.APIError{
+			Message:        "Failed to write response",
+			HttpStatusCode: http.StatusInternalServerError,
+		}, serr.WithCause(err))
+	}
+	return nil
 }
 
 func validateRequestBody[T any](req T, v *validator.Validate) serr.Error {
