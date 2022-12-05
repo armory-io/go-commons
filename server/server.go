@@ -32,6 +32,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/mitchellh/mapstructure"
+	"github.com/newrelic/go-agent/v3/integrations/nrgin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/samber/lo"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
@@ -241,6 +242,7 @@ func configureServer(
 	controllers ...IController,
 ) error {
 	g := gin.New()
+	g.Use(nrgin.Middleware())
 
 	// Dist Tracing
 	g.Use(otelgin.Middleware(md.Name))

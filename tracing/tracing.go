@@ -18,7 +18,9 @@ package tracing
 
 import (
 	"context"
+	"fmt"
 	"github.com/armory-io/go-commons/metadata"
+	"github.com/newrelic/go-agent/v3/newrelic"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -27,6 +29,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 	"go.uber.org/fx"
+	"os"
 )
 
 type NewRelicConfiguration struct {
@@ -92,6 +95,20 @@ func InitTracing(
 	return nil
 }
 
+func initNewRelicApp(config Configuration, app metadata.ApplicationMetadata) (*newrelic.Application, error) {
+	if config.NewRelic.Enabled {
+		nrapp, err := newrelic.NewApplication(
+			newrelic.ConfigAppName(fmt.Sprintf("%s_%s_%s", app.Name, app.Environment, app.Version)),
+			newrelic.ConfigCodeLevelMetricsEnabled(true),
+			newrelic.ConfigLicense(config.NewRelic.APIKey),
+			newrelic.ConfigDebugLogger(os.Stdout),
+		)
+		return nrapp, err
+	}
+	return nil, nil
+}
+
 var Module = fx.Options(
 	fx.Invoke(InitTracing),
+	fx.Provide(initNewRelicApp),
 )
