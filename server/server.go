@@ -434,6 +434,9 @@ var (
 		Message:        "Unable to extract request details",
 		HttpStatusCode: http.StatusInternalServerError,
 	}
+
+	extractPathDetails  = func(details *RequestDetails) any { return details.PathParameters }
+	extractQueryDetails = func(details *RequestDetails) any { return details.QueryParameters }
 )
 
 // ExtractRequestDetailsFromContext fetches the server.RequestDetails from the context
@@ -445,33 +448,32 @@ func ExtractRequestDetailsFromContext(ctx context.Context) (*RequestDetails, ser
 	return &v, nil
 }
 
-func extract[T any](ctx context.Context, pick func(details *RequestDetails) any) (*T, serr.Error) {
+func extract[T any](ctx context.Context, pick func(details *RequestDetails) any, target *T) serr.Error {
 	d, err := ExtractRequestDetailsFromContext(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	var t T
-	if err := mapstructure.WeakDecode(pick(d), &t); err != nil {
-		return nil, serr.NewErrorResponseFromApiError(unableToExtractRequestDetails, serr.WithCause(err))
+	if err := mapstructure.WeakDecode(pick(d), target); err != nil {
+		return serr.NewErrorResponseFromApiError(unableToExtractRequestDetails, serr.WithCause(err))
 	}
-	return &t, nil
+	return nil
 }
 
 // ExtractPathParamsFromRequestContext accepts a type param T and attempts to map the HTTP
 // request's path params into T.
 func ExtractPathParamsFromRequestContext[T any](ctx context.Context) (*T, serr.Error) {
-	return extract[T](ctx, func(details *RequestDetails) any {
-		return details.PathParameters
-	})
+	var result T
+	err := extract[T](ctx, extractPathDetails, &result)
+	return &result, err
 }
 
 // ExtractQueryParamsFromRequestContext accepts a type param T and attempts to map the HTTP
 // request's query params into T.
 func ExtractQueryParamsFromRequestContext[T any](ctx context.Context) (*T, serr.Error) {
-	return extract[T](ctx, func(details *RequestDetails) any {
-		return details.QueryParameters
-	})
+	var result T
+	err := extract[T](ctx, extractQueryDetails, &result)
+	return &result, err
 }
 
 var (

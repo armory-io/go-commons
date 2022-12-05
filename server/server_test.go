@@ -450,6 +450,120 @@ func (s *ServerTestSuite) TestGinHOF() {
 		apiError := ExtractApiError(t, recorder)
 		assert.Equal(t, errInternalServerError.Message, apiError.Errors[0].Message)
 	})
+
+	s.T().Run("parametrized handler will get context parameters from path", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		stubURL, _ := url.ParseRequestURI("https://example.com/")
+		c.Request = &http.Request{
+			Header: map[string][]string{},
+			Method: http.MethodGet,
+			URL:    stubURL,
+		}
+		c.Params = gin.Params{
+			gin.Param{
+				Key:   "key1",
+				Value: "hello world",
+			},
+			gin.Param{
+				Key:   "key2",
+				Value: "1234",
+			},
+		}
+
+		handler := NewEnrichedHandler1(func(ctx context.Context, request Void, arg1 PathParameters) (*Response[string], serr.Error) {
+			assert.Equal(t, "hello world", arg1.Key1)
+			assert.Equal(t, 1234, arg1.Key2)
+			return SimpleResponse("ok"), nil
+
+		}, HandlerConfig{
+			Path:           "/api/key1/:key1/key2/:key2",
+			Method:         http.MethodGet,
+			AuthZValidator: nil,
+		})
+
+		handlerFn := handler.GetGinHandlerFn(s.log, nil, &handlerDTO{
+			AuthOptOut: true,
+		})
+		handlerFn(c)
+		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
+	})
+
+	s.T().Run("parametrized handler will get context parameters from query", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		stubURL, _ := url.ParseRequestURI("https://example.com?keyA=world&keyB=4321")
+		c.Request = &http.Request{
+			Header: map[string][]string{},
+			Method: http.MethodGet,
+			URL:    stubURL,
+		}
+		handler := NewEnrichedHandler1(func(ctx context.Context, request Void, arg1 QueryParameters) (*Response[string], serr.Error) {
+			assert.Equal(t, "world", arg1.KeyA[0])
+			assert.Equal(t, 4321, arg1.KeyB[0])
+			return SimpleResponse("ok"), nil
+
+		}, HandlerConfig{
+			Path:           "/api?keyA=world&keyB=4321",
+			Method:         http.MethodGet,
+			AuthZValidator: nil,
+		})
+
+		handlerFn := handler.GetGinHandlerFn(s.log, nil, &handlerDTO{
+			AuthOptOut: true,
+		})
+		handlerFn(c)
+		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
+	})
+
+	s.T().Run("parametrized handler will get armory principal as argument", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		stubURL, _ := url.ParseRequestURI("https://example.com")
+		c.Request = &http.Request{
+			Header: map[string][]string{},
+			Method: http.MethodGet,
+			URL:    stubURL,
+		}
+		c.Request = c.Request.WithContext(iam.DangerouslyWriteUnverifiedPrincipalToContext(c, &iam.ArmoryCloudPrincipal{
+			Name: "happy@user.io",
+		}))
+		handler := NewEnrichedHandler1(func(ctx context.Context, request Void, arg1 ArmoryPrincipalArgument) (*Response[string], serr.Error) {
+			assert.Equal(t, "happy@user.io", arg1.Name)
+			return SimpleResponse("ok"), nil
+
+		}, HandlerConfig{
+			Path:   "",
+			Method: http.MethodGet,
+			AuthZValidator: func(p *iam.ArmoryCloudPrincipal) (string, bool) {
+				return "", true
+			},
+		})
+
+		handlerFn := handler.GetGinHandlerFn(s.log, nil, &handlerDTO{
+			AuthOptOut: false,
+		})
+		handlerFn(c)
+		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
+	})
+}
+
+type PathParameters struct {
+	Key1 string
+	Key2 int
+}
+
+func (PathParameters) Source() ArgumentDataSource {
+	return PathContextSource
+}
+
+type QueryParameters struct {
+	KeyA []string
+	KeyB []int
+}
+
+func (QueryParameters) Source() ArgumentDataSource {
+	return QueryContextSource
 }
 
 type Widget struct {
