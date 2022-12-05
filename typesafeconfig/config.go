@@ -221,7 +221,7 @@ func resolveTemplates(config map[string]any) error {
 func resolveSecrets(config map[string]any, log *zap.SugaredLogger) error {
 	return recurseStringValuesAndMap(config, func(value string) (string, error) {
 		if secrets.IsEncryptedSecret(value) {
-			log.Infof("Attempting to resolve actual value for: '%s'", color.New(color.FgHiGreen).Sprintf(value))
+			log.Infof("attempting to resolve actual value for: '%s'", color.New(color.FgHiGreen).Sprintf(value))
 			d, err := secrets.NewDecrypter(context.Background(), value)
 			if err != nil {
 				return value, multierr.Append(fmt.Errorf("failed to create decrypter for '%s'", value), err)

@@ -45,6 +45,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"unsafe"
 )
 
 type (
@@ -310,26 +311,9 @@ func writeResponse(contentType string, body any, w gin.ResponseWriter) serr.Erro
 	w.Header().Set("Content-Type", contentType)
 	switch contentType {
 	case "text/plain", "application/yaml":
-		t := reflect.TypeOf(body)
-		if t.Kind() != reflect.String {
-			return serr.NewErrorResponseFromApiError(serr.APIError{
-				Message:        "Failed to write response",
-				HttpStatusCode: http.StatusInternalServerError,
-			},
-				serr.WithErrorMessage(fmt.Sprintf("Handler specified that it produces %s but didn't return a string as the response", contentType)),
-				serr.WithExtraDetailsForLogging(serr.KVPair{
-					Key:   "actualType",
-					Value: t.String(),
-				}),
-			)
-		}
-		if _, err := w.Write([]byte(body.(string))); err != nil {
-			return serr.NewErrorResponseFromApiError(serr.APIError{
-				Message:        "Failed to write response",
-				HttpStatusCode: http.StatusInternalServerError,
-			}, serr.WithCause(err))
-		}
-		return nil
+		return writeStringResponse(contentType, body, w)
+	case "application/octet-stream":
+		return writeOctetStream(contentType, body, w)
 	default:
 		if err := json.NewEncoder(w).Encode(body); err != nil {
 			return serr.NewErrorResponseFromApiError(serr.APIError{
@@ -339,6 +323,57 @@ func writeResponse(contentType string, body any, w gin.ResponseWriter) serr.Erro
 		}
 		return nil
 	}
+}
+
+// writeOctetStream expects the body to be an io.ReadCloser, if it is, it will be copied to the response writer.
+// This can probably be refactored later, if needed to allow the body to be a byte[] or Reader vs only allowing ReadCloser.
+func writeOctetStream(contentType string, body any, w gin.ResponseWriter) serr.Error {
+	bodyContent, ok := body.(io.ReadCloser)
+	if !ok {
+		return serr.NewErrorResponseFromApiError(serr.APIError{
+			Message:        "Failed to write response",
+			HttpStatusCode: http.StatusInternalServerError,
+		},
+			serr.WithErrorMessage(fmt.Sprintf("Handler specified that it produces %s but didn't return a ReadCloser as the response", contentType)),
+		)
+	}
+
+	//goland:noinspection GoUnhandledErrorResult
+	defer bodyContent.Close()
+
+	if _, err := io.Copy(w, bodyContent); err != nil {
+		return serr.NewErrorResponseFromApiError(serr.APIError{
+			Message:        "Failed to write response",
+			HttpStatusCode: http.StatusInternalServerError,
+		},
+			serr.WithCause(err),
+			serr.WithErrorMessage("Failed to copy handler body to response writer"),
+		)
+	}
+	return nil
+}
+
+func writeStringResponse(contentType string, body any, w gin.ResponseWriter) serr.Error {
+	t := reflect.TypeOf(body)
+	if t.Kind() != reflect.String {
+		return serr.NewErrorResponseFromApiError(serr.APIError{
+			Message:        "Failed to write response",
+			HttpStatusCode: http.StatusInternalServerError,
+		},
+			serr.WithErrorMessage(fmt.Sprintf("Handler specified that it produces %s but didn't return a string as the response", contentType)),
+			serr.WithExtraDetailsForLogging(serr.KVPair{
+				Key:   "actualType",
+				Value: t.String(),
+			}),
+		)
+	}
+	if _, err := w.Write([]byte(body.(string))); err != nil {
+		return serr.NewErrorResponseFromApiError(serr.APIError{
+			Message:        "Failed to write response",
+			HttpStatusCode: http.StatusInternalServerError,
+		}, serr.WithCause(err))
+	}
+	return nil
 }
 
 func validateRequestBody[T any](req T, v *validator.Validate) serr.Error {
@@ -363,11 +398,6 @@ func validateRequestBody[T any](req T, v *validator.Validate) serr.Error {
 				serr.WithCause(vErr),
 			)
 		}
-
-		return serr.NewErrorResponseFromApiError(serr.APIError{
-			Message:        "Failed to validate request",
-			HttpStatusCode: http.StatusBadRequest,
-		}, serr.WithCause(err))
 	}
 	return nil
 }
@@ -558,29 +588,9 @@ func ginHOF[REQUEST, RESPONSE any](
 			response, apiError = handlerFn(c.Request.Context(), req)
 			break
 		case http.MethodPost, http.MethodPut, http.MethodPatch:
-			var req REQUEST
-			if reflect.TypeOf(req) != nil && reflect.TypeOf(req).String() != "server.Void" {
-				if c.Request.Body == nil {
-					apiError = serr.NewErrorResponseFromApiError(errBodyRequired)
-					break
-				}
-				b, err := io.ReadAll(c.Request.Body)
-				if err != nil {
-					apiError = serr.NewErrorResponseFromApiError(errFailedToReadRequest, serr.WithCause(err))
-					break
-				}
-				if err := json.Unmarshal(b, &req); err != nil {
-					apiError = handleUnmarshalError(b, err)
-					break
-				}
-
-				if apiError = validateRequestBody(req, requestValidator); apiError != nil {
-					break
-				}
-			}
-
-			if err := defaults.Set(&req); err != nil {
-				apiError = serr.NewErrorResponseFromApiError(errFailedToSetRequestDefaults, serr.WithCause(err))
+			req, err := extractRequest[REQUEST](c, requestValidator)
+			if err != nil {
+				apiError = err
 				break
 			}
 			response, apiError = handlerFn(c.Request.Context(), req)
@@ -596,8 +606,9 @@ func ginHOF[REQUEST, RESPONSE any](
 		}
 
 		var r RESPONSE
+		responseType := reflect.TypeOf(r)
 		if response == nil || reflect.ValueOf(&response.Body).Elem().IsZero() {
-			if reflect.TypeOf(r) != nil && reflect.TypeOf(r).String() == "server.Void" {
+			if responseType != nil && responseType == voidType {
 				c.Status(http.StatusNoContent)
 				_, _ = c.Writer.Write([]byte{})
 				return
@@ -677,6 +688,46 @@ func handleUnmarshalError(bytes []byte, err error) serr.Error {
 	}
 
 	return serr.NewErrorResponseFromApiError(returnErr, serr.WithCause(err))
+}
+
+var (
+	byteArrayType = reflect.TypeOf([]byte(nil))
+	voidType      = reflect.TypeOf(Void{})
+)
+
+func extractRequest[REQUEST any](c *gin.Context, requestValidator *validator.Validate) (REQUEST, serr.Error) {
+	var req REQUEST
+	reqType := reflect.TypeOf(req)
+	if reqType == nil || reqType == voidType {
+		return req, nil
+	}
+
+	if c.Request.Body == nil {
+		return req, serr.NewErrorResponseFromApiError(errBodyRequired)
+	}
+
+	b, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return req, serr.NewErrorResponseFromApiError(errFailedToReadRequest, serr.WithCause(err))
+	}
+
+	if reqType == byteArrayType { // if the handler has specified that it wants body []byte, we will give it the raw bytes.
+		return *(*REQUEST)(unsafe.Pointer(&b)), nil
+	}
+
+	if err := json.Unmarshal(b, &req); err != nil {
+		return req, handleUnmarshalError(b, err)
+	}
+
+	if apiError := validateRequestBody(req, requestValidator); apiError != nil {
+		return req, apiError
+	}
+
+	if err := defaults.Set(&req); err != nil {
+		return req, serr.NewErrorResponseFromApiError(errFailedToSetRequestDefaults, serr.WithCause(err))
+	}
+
+	return req, nil
 }
 
 // writeAndLogApiErrorThenAbort a helper function that will take a serr.Error and ensure that it is logged and a properly
