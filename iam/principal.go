@@ -31,7 +31,6 @@ const (
 )
 
 type ArmoryCloudPrincipal struct {
-
 	//  PrincipalType The type of principal, user or machine
 	Type PrincipalType `json:"type"`
 	// Name  This is the principals name For user types this is will the users email address For machine  types this will be the identifier of the OIDC application that represents the machine
@@ -55,6 +54,8 @@ type ArmoryCloudPrincipal struct {
 	Scopes []string `json:"scopes"`
 	// Roles List of groups that a principal belongs to
 	Roles []string `json:"roles"`
+
+	UserId string `json:"userId"`
 }
 
 func (p *ArmoryCloudPrincipal) Tenant() string {
