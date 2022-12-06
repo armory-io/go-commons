@@ -18,6 +18,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"github.com/armory-io/go-commons/iam"
 	"github.com/armory-io/go-commons/server/serr"
 	"github.com/gin-gonic/gin"
@@ -62,8 +63,26 @@ type (
 
 	handler[T, U any] struct {
 		config     HandlerConfig
-		handleFunc func(ctx context.Context, request T) (*Response[U], serr.Error)
+		handleFunc handleRequestDelegate[T, U]
 	}
+
+	handleRequestDelegate[T, U any] func(ctx context.Context, request T) (*Response[U], serr.Error)
+
+	HandlerArgument interface {
+		Source() ArgumentDataSource
+	}
+
+	ArmoryPrincipalArgument struct {
+		*iam.ArmoryCloudPrincipal
+	}
+
+	ArgumentDataSource int
+)
+
+const (
+	PathContextSource  ArgumentDataSource = 0
+	QueryContextSource                    = 1
+	AuthContextSource                     = 2
 )
 
 func (r *handler[REQUEST, RESPONSE]) Config() HandlerConfig {
@@ -74,10 +93,93 @@ func (r *handler[REQUEST, RESPONSE]) GetGinHandlerFn(log *zap.SugaredLogger, req
 	return ginHOF(r.handleFunc, config, requestValidator, log)
 }
 
+func (ArmoryPrincipalArgument) Source() ArgumentDataSource {
+	return AuthContextSource
+}
+
 // NewHandler creates a Handler from a handler function and server.HandlerConfig
 func NewHandler[REQUEST, RESPONSE any](f func(ctx context.Context, request REQUEST) (*Response[RESPONSE], serr.Error), config HandlerConfig) Handler {
 	return &handler[REQUEST, RESPONSE]{
 		config:     config,
 		handleFunc: f,
 	}
+}
+
+func NewEnrichedHandler1[REQUEST, RESPONSE any, CTX HandlerArgument](f func(ctx context.Context, request REQUEST, arg1 CTX) (*Response[RESPONSE], serr.Error), config HandlerConfig) Handler {
+	var delegate handleRequestDelegate[REQUEST, RESPONSE] = func(ctx context.Context, r REQUEST) (*Response[RESPONSE], serr.Error) {
+		arg, err := extractHandlerArgumentFromContext[CTX](ctx)
+		if nil != err {
+			return nil, err
+		}
+
+		return f(ctx, r, *arg)
+	}
+
+	return &handler[REQUEST, RESPONSE]{
+		config:     config,
+		handleFunc: delegate,
+	}
+}
+
+func NewEnrichedHandler2[REQUEST, RESPONSE any, CTX1 HandlerArgument, CTX2 HandlerArgument](f func(ctx context.Context, request REQUEST, arg1 CTX1, arg2 CTX2) (*Response[RESPONSE], serr.Error), config HandlerConfig) Handler {
+
+	var delegate handleRequestDelegate[REQUEST, RESPONSE] = func(ctx context.Context, r REQUEST) (*Response[RESPONSE], serr.Error) {
+		arg1, err := extractHandlerArgumentFromContext[CTX1](ctx)
+		if nil != err {
+			return nil, err
+		}
+		arg2, err := extractHandlerArgumentFromContext[CTX2](ctx)
+		if nil != err {
+			return nil, err
+		}
+		return f(ctx, r, *arg1, *arg2)
+	}
+
+	return &handler[REQUEST, RESPONSE]{
+		config:     config,
+		handleFunc: delegate,
+	}
+}
+
+func NewEnrichedHandler3[REQUEST, RESPONSE any, CTX1 HandlerArgument, CTX2 HandlerArgument, CTX3 HandlerArgument](f func(ctx context.Context, request REQUEST, arg1 CTX1, arg2 CTX2, arg3 CTX3) (*Response[RESPONSE], serr.Error), config HandlerConfig) Handler {
+
+	var delegate handleRequestDelegate[REQUEST, RESPONSE] = func(ctx context.Context, r REQUEST) (*Response[RESPONSE], serr.Error) {
+		arg1, err := extractHandlerArgumentFromContext[CTX1](ctx)
+		if nil != err {
+			return nil, err
+		}
+		arg2, err := extractHandlerArgumentFromContext[CTX2](ctx)
+		if nil != err {
+			return nil, err
+		}
+		arg3, err := extractHandlerArgumentFromContext[CTX3](ctx)
+		if nil != err {
+			return nil, err
+		}
+		return f(ctx, r, *arg1, *arg2, *arg3)
+	}
+
+	return &handler[REQUEST, RESPONSE]{
+		config:     config,
+		handleFunc: delegate,
+	}
+}
+
+func extractHandlerArgumentFromContext[CTX HandlerArgument](c context.Context) (*CTX, serr.Error) {
+	var arg CTX
+	switch arg.Source() {
+	case PathContextSource:
+		err := extract(c, extractPathDetails, &arg)
+		return &arg, err
+
+	case QueryContextSource:
+		err := extract(c, extractQueryDetails, &arg)
+		return &arg, err
+
+	case AuthContextSource:
+		principal, err := ExtractPrincipalFromContext(c)
+		var retValue interface{} = &ArmoryPrincipalArgument{principal}
+		return retValue.(*CTX), err
+	}
+	return nil, serr.NewSimpleError(fmt.Sprintf("not supported argument source %d", arg.Source()), nil)
 }
