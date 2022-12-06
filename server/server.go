@@ -869,33 +869,27 @@ func requestLogger(log *zap.SugaredLogger, config RequestLoggingConfiguration) g
 	return func(c *gin.Context) {
 		c.Next()
 
-		switch status := c.Writer.Status(); {
-		case status >= 200 && status < 300:
-			if config.Disable2XX {
-				return
-			}
-			break
-		case status >= 300 && status < 400:
-			if config.Disable3XX {
-				return
-			}
-			break
-		case status >= 400 && status < 400:
-			if config.Disable4XX {
-				return
-			}
-			break
-		case status >= 500 && status < 500:
-			if config.Disable5XX {
-				return
-			}
-			break
-		default:
-			if !slices.Contains(config.BlockList, c.FullPath()) {
-				log.
-					With(getBaseFields(c.Request, c.Writer.Status())...).
-					Infof("request: %s %s", c.Request.Method, c.FullPath())
-			}
+		status := c.Writer.Status()
+		if status >= 200 && status < 300 && config.Disable2XX {
+			return
+		}
+
+		if status >= 300 && status < 400 && config.Disable3XX {
+			return
+		}
+
+		if status >= 400 && status < 400 && config.Disable4XX {
+			return
+		}
+
+		if status >= 500 && status < 600 && config.Disable5XX {
+			return
+		}
+
+		if !slices.Contains(config.BlockList, c.FullPath()) {
+			log.
+				With(getBaseFields(c.Request, c.Writer.Status())...).
+				Infof("[ REQUEST LOGGER ]")
 		}
 	}
 }
