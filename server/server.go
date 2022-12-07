@@ -167,6 +167,19 @@ type (
 		Headers    map[string][]string
 		Body       T
 	}
+
+	requestArgs[T any, A1 HandlerArgument, A2 HandlerArgument, A3 HandlerArgument] struct {
+		Request *T
+		Arg1    *A1
+		Arg2    *A2
+		Arg3    *A3
+	}
+
+	// HandlerExtensionPoints handler flow extensibility points - register specific handlers to plug additional processing
+	// in the pipeline
+	HandlerExtensionPoints struct {
+		BeforeRequestValidate beforeRequestValidateFn
+	}
 )
 
 // SimpleResponse a convenience function for wrapping a body in a response struct with defaults
@@ -341,7 +354,7 @@ func writeResponse(contentType string, body any, w gin.ResponseWriter) serr.Erro
 	}
 }
 
-func validateRequestBody[T any](req T, v *validator.Validate) serr.Error {
+func validateRequestBody[T interface{}](req *T, v *validator.Validate) serr.Error {
 	err := v.Struct(req)
 	if err != nil {
 		vErr, ok := err.(validator.ValidationErrors)
@@ -429,6 +442,23 @@ func AddRequestDetailsToCtx(ctx context.Context, details RequestDetails) context
 	return context.WithValue(ctx, requestDetailsKey{}, details)
 }
 
+// requestArguments - strongly typed, extracted payload from the request - depending on the handler method will
+// contain request, extracted path parameters, query parameters, principal parameter; to be used as server handler's
+// input arguments
+type requestArguments struct {
+	arguments interface{}
+}
+
+type requestArgumentsKey struct{}
+
+func addRequestArgumentsToCtx(ctx context.Context, arguments interface{}) context.Context {
+	return context.WithValue(ctx, requestArgumentsKey{}, arguments)
+}
+
+func referenceArguments[REQUEST any, ARG1 HandlerArgument, ARG2 HandlerArgument, ARG3 HandlerArgument](ctx context.Context) requestArgs[REQUEST, ARG1, ARG2, ARG3] {
+	return ctx.Value(requestArgumentsKey{}).(requestArgs[REQUEST, ARG1, ARG2, ARG3])
+}
+
 var (
 	unableToExtractRequestDetails = serr.APIError{
 		Message:        "Unable to extract request details",
@@ -509,9 +539,11 @@ var (
 
 // ginHOF creates Higher Order gin Handler Function, that wraps the IController handler function with a function that deals with the common request/response logic
 func ginHOF[REQUEST, RESPONSE any](
-	handlerFn func(ctx context.Context, request REQUEST) (*Response[RESPONSE], serr.Error),
+	handlerFn handleRequestDelegate[REQUEST, RESPONSE],
+	extractRequestArgsFn extractRequestArgumentsDelegate[REQUEST],
 	handler *handlerDTO,
 	requestValidator *validator.Validate,
+	extensions *HandlerExtensionPoints,
 	logger *zap.SugaredLogger,
 ) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -545,53 +577,49 @@ func ginHOF[REQUEST, RESPONSE any](
 			pathParameters[p.Key] = p.Value
 		}
 
+		req, shouldProcessBody, apiError := extractRequestBody[REQUEST](c)
+		if apiError != nil {
+			writeAndLogApiErrorThenAbort(c, apiError, logger)
+			return
+		}
+
+		if nil == extractRequestArgsFn {
+			extractRequestArgsFn = extractArgsFromRequest1[REQUEST]
+		}
+
 		// Stuff Request details into the context
-		c.Request = c.Request.WithContext(AddRequestDetailsToCtx(c.Request.Context(), RequestDetails{
+		requestDetails := RequestDetails{
 			QueryParameters: c.Request.URL.Query(),
 			PathParameters:  pathParameters,
 			Headers:         c.Request.Header,
-		}))
+		}
+		c.Request = c.Request.WithContext(AddRequestDetailsToCtx(c.Request.Context(), requestDetails))
 
-		var response *Response[RESPONSE]
-		var apiError serr.Error
-		switch c.Request.Method {
-		case http.MethodGet, http.MethodDelete:
-			var req REQUEST
-			response, apiError = handlerFn(c.Request.Context(), req)
-			break
-		case http.MethodPost, http.MethodPut, http.MethodPatch:
-			var req REQUEST
-			if reflect.TypeOf(req) != nil && reflect.TypeOf(req).String() != "server.Void" {
-				if c.Request.Body == nil {
-					apiError = serr.NewErrorResponseFromApiError(errBodyRequired)
-					break
-				}
-				b, err := io.ReadAll(c.Request.Body)
-				if err != nil {
-					apiError = serr.NewErrorResponseFromApiError(errFailedToReadRequest, serr.WithCause(err))
-					break
-				}
-				if err := json.Unmarshal(b, &req); err != nil {
-					apiError = handleUnmarshalError(b, err)
-					break
-				}
+		args, apiError := extractRequestArgsFn(c.Request.Context(), req)
+		if apiError != nil {
+			writeAndLogApiErrorThenAbort(c, apiError, logger)
+			return
+		}
+		c.Request = c.Request.WithContext(addRequestArgumentsToCtx(c.Request.Context(), args))
 
-				if apiError = validateRequestBody(req, requestValidator); apiError != nil {
-					break
-				}
-			}
-
-			if err := defaults.Set(&req); err != nil {
-				apiError = serr.NewErrorResponseFromApiError(errFailedToSetRequestDefaults, serr.WithCause(err))
-				break
-			}
-			response, apiError = handlerFn(c.Request.Context(), req)
-			break
-		default:
-			apiError = serr.NewErrorResponseFromApiError(errMethodNotAllowed)
-			break
+		if extensions.BeforeRequestValidate != nil {
+			extensions.BeforeRequestValidate(c.Request.Context())
 		}
 
+		if shouldProcessBody {
+			apiError = validateRequestBody(req, requestValidator)
+			if nil != apiError {
+				writeAndLogApiErrorThenAbort(c, apiError, logger)
+				return
+			}
+		}
+
+		if err := defaults.Set(req); err != nil {
+			apiError = serr.NewErrorResponseFromApiError(errFailedToSetRequestDefaults, serr.WithCause(err))
+			writeAndLogApiErrorThenAbort(c, apiError, logger)
+		}
+
+		response, apiError := handlerFn(c.Request.Context(), *req)
 		if apiError != nil {
 			writeAndLogApiErrorThenAbort(c, apiError, logger)
 			return
@@ -634,6 +662,32 @@ func ginHOF[REQUEST, RESPONSE any](
 			return
 		}
 	}
+}
+
+func extractRequestBody[REQUEST any](c *gin.Context) (*REQUEST, bool, serr.Error) {
+	var req REQUEST
+	shouldProcessBody := false
+	switch c.Request.Method {
+	case http.MethodGet, http.MethodDelete:
+		shouldProcessBody = false
+	case http.MethodPost, http.MethodPut, http.MethodPatch:
+		shouldProcessBody = reflect.TypeOf(req) != nil && reflect.TypeOf(req).String() != "server.Void"
+	default:
+		return nil, false, serr.NewErrorResponseFromApiError(errMethodNotAllowed)
+	}
+	if shouldProcessBody {
+		if c.Request.Body == nil {
+			return nil, shouldProcessBody, serr.NewErrorResponseFromApiError(errBodyRequired)
+		}
+		b, err := io.ReadAll(c.Request.Body)
+		if err != nil {
+			return nil, shouldProcessBody, serr.NewErrorResponseFromApiError(errFailedToReadRequest, serr.WithCause(err))
+		}
+		if err := json.Unmarshal(b, &req); err != nil {
+			return nil, shouldProcessBody, handleUnmarshalError(b, err)
+		}
+	}
+	return &req, shouldProcessBody, nil
 }
 
 func handleUnmarshalError(bytes []byte, err error) serr.Error {
@@ -849,4 +903,69 @@ func requestLogger(log *zap.SugaredLogger, config RequestLoggingConfiguration) g
 			}
 		}
 	}
+}
+
+func extractHandlerArgumentFromContext[CTX HandlerArgument](c context.Context) (*CTX, serr.Error) {
+	var arg CTX
+	switch arg.Source() {
+
+	case PathContextSource:
+		err := extract(c, extractPathDetails, &arg)
+		return &arg, err
+
+	case QueryContextSource:
+		err := extract(c, extractQueryDetails, &arg)
+		return &arg, err
+
+	case AuthContextSource:
+		principal, err := ExtractPrincipalFromContext(c)
+		var retValue interface{} = &ArmoryPrincipalArgument{principal}
+		return retValue.(*CTX), err
+
+	case voidArgumentSource:
+		var retValue interface{} = &voidArgument{}
+		return retValue.(*CTX), nil
+	}
+
+	return nil, serr.NewSimpleError(fmt.Sprintf("not supported argument source %d", arg.Source()), nil)
+}
+
+func extractArgsFromRequest1[REQUEST any](c context.Context, r *REQUEST) (interface{}, serr.Error) {
+	return requestArgs[REQUEST, voidArgument, voidArgument, voidArgument]{Request: r}, nil
+}
+
+func extractArgsFromRequest2[REQUEST any, ARG1 HandlerArgument](c context.Context, r *REQUEST) (interface{}, serr.Error) {
+	arg, err := extractHandlerArgumentFromContext[ARG1](c)
+	if nil != err {
+		return nil, err
+	}
+	return requestArgs[REQUEST, ARG1, voidArgument, voidArgument]{Request: r, Arg1: arg}, nil
+}
+
+func extractArgsFromRequest3[REQUEST any, ARG1 HandlerArgument, ARG2 HandlerArgument](c context.Context, r *REQUEST) (interface{}, serr.Error) {
+	arg1, err := extractHandlerArgumentFromContext[ARG1](c)
+	if nil != err {
+		return nil, err
+	}
+	arg2, err := extractHandlerArgumentFromContext[ARG2](c)
+	if nil != err {
+		return nil, err
+	}
+	return requestArgs[REQUEST, ARG1, ARG2, voidArgument]{Request: r, Arg1: arg1, Arg2: arg2}, nil
+}
+
+func extractArgsFromRequest4[REQUEST any, ARG1 HandlerArgument, ARG2 HandlerArgument, ARG3 HandlerArgument](c context.Context, r *REQUEST) (interface{}, serr.Error) {
+	arg1, err := extractHandlerArgumentFromContext[ARG1](c)
+	if nil != err {
+		return nil, err
+	}
+	arg2, err := extractHandlerArgumentFromContext[ARG2](c)
+	if nil != err {
+		return nil, err
+	}
+	arg3, err := extractHandlerArgumentFromContext[ARG3](c)
+	if nil != err {
+		return nil, err
+	}
+	return requestArgs[REQUEST, ARG1, ARG2, ARG3]{Request: r, Arg1: arg1, Arg2: arg2, Arg3: arg3}, nil
 }

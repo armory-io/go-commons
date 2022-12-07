@@ -8,6 +8,7 @@ import (
 	"github.com/armory-io/go-commons/server/serr"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
@@ -81,7 +82,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 		ginHOF(func(ctx context.Context, _ Void) (*Response[Void], serr.Error) {
 			actual, _ = ExtractRequestDetailsFromContext(ctx)
 			return nil, nil
-		}, handler, nil, s.log)(c)
+		}, nil, handler, nil, &HandlerExtensionPoints{}, s.log)(c)
 		assert.Equal(s.T(), expected, actual)
 	})
 
@@ -95,7 +96,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 			URL:    stubURL,
 		}
 
-		ginHOF(noop, &handlerDTO{}, nil, s.log)(c)
+		ginHOF(noop, nil, &handlerDTO{}, nil, &HandlerExtensionPoints{}, s.log)(c)
 		apiError := ExtractApiError(t, recorder)
 		assert.Equal(t, invalidCredentialsError.Message, apiError.Errors[0].Message)
 		assert.Equal(t, invalidCredentialsError.HttpStatusCode, recorder.Result().StatusCode)
@@ -115,13 +116,13 @@ func (s *ServerTestSuite) TestGinHOF() {
 			Name: "s.archer@p4o.io",
 		}))
 
-		ginHOF(noop, &handlerDTO{
+		ginHOF(noop, nil, &handlerDTO{
 			AuthZValidators: []AuthZValidatorFn{
 				func(p *iam.ArmoryCloudPrincipal) (string, bool) {
 					return "the principal is invalid", false
 				},
 			},
-		}, nil, s.log)(c)
+		}, nil, &HandlerExtensionPoints{}, s.log)(c)
 		apiError := ExtractApiError(t, recorder)
 		assert.Equal(t, principalNotAuthorized.Message, apiError.Errors[0].Message)
 		assert.Equal(t, principalNotAuthorized.HttpStatusCode, recorder.Result().StatusCode)
@@ -137,10 +138,10 @@ func (s *ServerTestSuite) TestGinHOF() {
 			URL:    stubURL,
 		}
 
-		ginHOF(noop, &handlerDTO{
+		ginHOF(noop, nil, &handlerDTO{
 			StatusCode: http.StatusNoContent,
 			AuthOptOut: true,
-		}, nil, s.log)(c)
+		}, nil, &HandlerExtensionPoints{}, s.log)(c)
 
 		assert.Equal(t, http.StatusNoContent, recorder.Result().StatusCode)
 		b, err := io.ReadAll(recorder.Result().Body)
@@ -166,10 +167,10 @@ func (s *ServerTestSuite) TestGinHOF() {
 			return nil, nil
 		}
 
-		ginHOF(handlerFn, &handlerDTO{
+		ginHOF(handlerFn, nil, &handlerDTO{
 			StatusCode: http.StatusNoContent,
 			AuthOptOut: true,
-		}, nil, s.log)(c)
+		}, nil, &HandlerExtensionPoints{}, s.log)(c)
 
 		apiError := ExtractApiError(t, recorder)
 		assert.Equal(t, errBodyRequired.Message, apiError.Errors[0].Message)
@@ -193,10 +194,10 @@ func (s *ServerTestSuite) TestGinHOF() {
 			return nil, nil
 		}
 
-		ginHOF(handlerFn, &handlerDTO{
+		ginHOF(handlerFn, nil, &handlerDTO{
 			StatusCode: http.StatusNoContent,
 			AuthOptOut: true,
-		}, validator.New(), s.log)(c)
+		}, validator.New(), &HandlerExtensionPoints{}, s.log)(c)
 
 		apiError := ExtractApiError(t, recorder)
 		assert.Equal(t, "Key: 'Name' Error:Field validation for 'Name' failed on the 'required' tag", apiError.Errors[0].Message)
@@ -220,10 +221,10 @@ func (s *ServerTestSuite) TestGinHOF() {
 			return nil, nil
 		}
 
-		ginHOF(handlerFn, &handlerDTO{
+		ginHOF(handlerFn, nil, &handlerDTO{
 			StatusCode: http.StatusNoContent,
 			AuthOptOut: true,
-		}, validator.New(), s.log)(c)
+		}, validator.New(), &HandlerExtensionPoints{}, s.log)(c)
 
 		apiError := ExtractApiError(t, recorder)
 		assert.Equal(t, errFailedToUnmarshalRequest.Message, apiError.Errors[0].Message)
@@ -254,10 +255,10 @@ func (s *ServerTestSuite) TestGinHOF() {
 			return nil, nil
 		}
 
-		ginHOF(handlerFn, &handlerDTO{
+		ginHOF(handlerFn, nil, &handlerDTO{
 			StatusCode: http.StatusNoContent,
 			AuthOptOut: true,
-		}, validator.New(), s.log)(c)
+		}, validator.New(), &HandlerExtensionPoints{}, s.log)(c)
 
 		apiError := ExtractApiError(t, recorder)
 		assert.Equal(t, "Failed to unmarshal request", apiError.Errors[0].Message)
@@ -291,10 +292,10 @@ func (s *ServerTestSuite) TestGinHOF() {
 			return nil, nil
 		}
 
-		ginHOF(handlerFn, &handlerDTO{
+		ginHOF(handlerFn, nil, &handlerDTO{
 			StatusCode: http.StatusNoContent,
 			AuthOptOut: true,
-		}, validator.New(), s.log)(c)
+		}, validator.New(), &HandlerExtensionPoints{}, s.log)(c)
 
 		s.Equal("fill-me-in", actual)
 	})
@@ -309,10 +310,10 @@ func (s *ServerTestSuite) TestGinHOF() {
 			URL:    stubURL,
 		}
 
-		ginHOF(noop, &handlerDTO{
+		ginHOF(noop, nil, &handlerDTO{
 			StatusCode: http.StatusNoContent,
 			AuthOptOut: true,
-		}, validator.New(), s.log)(c)
+		}, validator.New(), &HandlerExtensionPoints{}, s.log)(c)
 
 		apiError := ExtractApiError(t, recorder)
 		assert.Equal(t, errMethodNotAllowed.Message, apiError.Errors[0].Message)
@@ -332,10 +333,10 @@ func (s *ServerTestSuite) TestGinHOF() {
 		handlerFn := func(ctx context.Context, _ Void) (*Response[Void], serr.Error) {
 			return nil, serr.NewSimpleErrorWithStatusCode("foo", 404, nil)
 		}
-		ginHOF(handlerFn, &handlerDTO{
+		ginHOF(handlerFn, nil, &handlerDTO{
 			StatusCode: http.StatusNoContent,
 			AuthOptOut: true,
-		}, nil, s.log)(c)
+		}, nil, &HandlerExtensionPoints{}, s.log)(c)
 
 		apiError := ExtractApiError(t, recorder)
 		assert.Equal(t, "foo", apiError.Errors[0].Message)
@@ -359,10 +360,10 @@ func (s *ServerTestSuite) TestGinHOF() {
 		handlerFn := func(ctx context.Context, _ Void) (*Response[MyResponse], serr.Error) {
 			return SimpleResponse(MyResponse{MyCoolResponse: "Hey"}), nil
 		}
-		ginHOF(handlerFn, &handlerDTO{
+		ginHOF(handlerFn, nil, &handlerDTO{
 			StatusCode: http.StatusCreated,
 			AuthOptOut: true,
-		}, nil, s.log)(c)
+		}, nil, &HandlerExtensionPoints{}, s.log)(c)
 
 		res := ExtractResponse[MyResponse](t, recorder)
 		assert.Equal(t, "Hey", res.MyCoolResponse)
@@ -388,10 +389,10 @@ func (s *ServerTestSuite) TestGinHOF() {
 				},
 			}, nil
 		}
-		ginHOF(handlerFn, &handlerDTO{
+		ginHOF(handlerFn, nil, &handlerDTO{
 			StatusCode: http.StatusOK,
 			AuthOptOut: true,
-		}, nil, s.log)(c)
+		}, nil, &HandlerExtensionPoints{}, s.log)(c)
 
 		res := ExtractResponse[MyResponse](t, recorder)
 		assert.Equal(t, "Let's go to the tea party", res.MyCoolResponse)
@@ -415,10 +416,10 @@ func (s *ServerTestSuite) TestGinHOF() {
 			}, nil
 		}
 
-		ginHOF(handlerFn, &handlerDTO{
+		ginHOF(handlerFn, nil, &handlerDTO{
 			StatusCode: http.StatusOK,
 			AuthOptOut: true,
-		}, nil, s.log)(c)
+		}, nil, &HandlerExtensionPoints{}, s.log)(c)
 
 		assert.Equal(t, errServerFailedToProduceExpectedResponse.HttpStatusCode, recorder.Result().StatusCode)
 		apiError := ExtractApiError(t, recorder)
@@ -441,10 +442,10 @@ func (s *ServerTestSuite) TestGinHOF() {
 			return SimpleResponse(name), nil
 		}
 
-		ginHOF(handlerFn, &handlerDTO{
+		ginHOF(handlerFn, nil, &handlerDTO{
 			StatusCode: http.StatusOK,
 			AuthOptOut: true,
-		}, nil, s.log)(c)
+		}, nil, &HandlerExtensionPoints{}, s.log)(c)
 
 		assert.Equal(t, errInternalServerError.HttpStatusCode, recorder.Result().StatusCode)
 		apiError := ExtractApiError(t, recorder)
@@ -471,7 +472,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 			},
 		}
 
-		handler := NewEnrichedHandler1(func(ctx context.Context, request Void, arg1 PathParameters) (*Response[string], serr.Error) {
+		handler := New1ArgHandler(func(ctx context.Context, request Void, arg1 PathParameters) (*Response[string], serr.Error) {
 			assert.Equal(t, "hello world", arg1.Key1)
 			assert.Equal(t, 1234, arg1.Key2)
 			return SimpleResponse("ok"), nil
@@ -498,7 +499,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 			Method: http.MethodGet,
 			URL:    stubURL,
 		}
-		handler := NewEnrichedHandler1(func(ctx context.Context, request Void, arg1 QueryParameters) (*Response[string], serr.Error) {
+		handler := New1ArgHandler(func(ctx context.Context, request Void, arg1 QueryParameters) (*Response[string], serr.Error) {
 			assert.Equal(t, "world", arg1.KeyA[0])
 			assert.Equal(t, 4321, arg1.KeyB[0])
 			return SimpleResponse("ok"), nil
@@ -528,7 +529,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 		c.Request = c.Request.WithContext(iam.DangerouslyWriteUnverifiedPrincipalToContext(c, &iam.ArmoryCloudPrincipal{
 			Name: "happy@user.io",
 		}))
-		handler := NewEnrichedHandler1(func(ctx context.Context, request Void, arg1 ArmoryPrincipalArgument) (*Response[string], serr.Error) {
+		handler := New1ArgHandler(func(ctx context.Context, request Void, arg1 ArmoryPrincipalArgument) (*Response[string], serr.Error) {
 			assert.Equal(t, "happy@user.io", arg1.Name)
 			return SimpleResponse("ok"), nil
 
@@ -542,6 +543,127 @@ func (s *ServerTestSuite) TestGinHOF() {
 
 		handlerFn := handler.GetGinHandlerFn(s.log, nil, &handlerDTO{
 			AuthOptOut: false,
+		})
+		handlerFn(c)
+		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
+	})
+
+	s.T().Run("parametrized handler with 2 args works", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		stubURL, _ := url.ParseRequestURI("https://example.com?keyA=world&keyB=4321")
+		c.Request = &http.Request{
+			Header: map[string][]string{},
+			Method: http.MethodGet,
+			URL:    stubURL,
+		}
+		c.Request = c.Request.WithContext(iam.DangerouslyWriteUnverifiedPrincipalToContext(c, &iam.ArmoryCloudPrincipal{
+			Name: "happy@user.io",
+		}))
+		handler := New2ArgHandler(func(ctx context.Context, request Void, arg1 ArmoryPrincipalArgument, arg2 QueryParameters) (*Response[string], serr.Error) {
+			assert.Equal(t, "happy@user.io", arg1.Name)
+			assert.Equal(t, arg2.KeyA[0], "world")
+			assert.Equal(t, arg2.KeyB[0], 4321)
+			return SimpleResponse("ok"), nil
+
+		}, HandlerConfig{
+			Path:   "",
+			Method: http.MethodGet,
+			AuthZValidator: func(p *iam.ArmoryCloudPrincipal) (string, bool) {
+				return "", true
+			},
+		})
+
+		handlerFn := handler.GetGinHandlerFn(s.log, nil, &handlerDTO{
+			AuthOptOut: false,
+		})
+		handlerFn(c)
+		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
+	})
+
+	s.T().Run("parametrized handler with 3 args works", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		stubURL, _ := url.ParseRequestURI("https://example.com?keyA=world&keyB=4321")
+		c.Request = &http.Request{
+			Header: map[string][]string{},
+			Method: http.MethodGet,
+			URL:    stubURL,
+		}
+		c.Request = c.Request.WithContext(iam.DangerouslyWriteUnverifiedPrincipalToContext(c, &iam.ArmoryCloudPrincipal{
+			Name: "happy@user.io",
+		}))
+		c.Params = gin.Params{
+			gin.Param{
+				Key:   "key1",
+				Value: "hello world",
+			},
+			gin.Param{
+				Key:   "key2",
+				Value: "1234",
+			},
+		}
+		handler := New3ArgHandler(func(ctx context.Context, request Void, arg1 ArmoryPrincipalArgument, arg2 QueryParameters, arg3 PathParameters) (*Response[string], serr.Error) {
+			assert.Equal(t, "happy@user.io", arg1.Name)
+			assert.Equal(t, arg2.KeyA[0], "world")
+			assert.Equal(t, arg2.KeyB[0], 4321)
+			assert.Equal(t, arg3.Key1, "hello world")
+			assert.Equal(t, arg3.Key2, 1234)
+			return SimpleResponse("ok"), nil
+
+		}, HandlerConfig{
+			Path:   "",
+			Method: http.MethodGet,
+			AuthZValidator: func(p *iam.ArmoryCloudPrincipal) (string, bool) {
+				return "", true
+			},
+		})
+
+		handlerFn := handler.GetGinHandlerFn(s.log, nil, &handlerDTO{
+			AuthOptOut: false,
+		})
+		handlerFn(c)
+		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
+	})
+
+	s.T().Run("parametrized handler will trigger 'beforeValidation' callback and populate request body with data from path parameters", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		stubURL, _ := url.ParseRequestURI("https://example.com/")
+		c.Request = &http.Request{
+			Header: map[string][]string{},
+			Method: http.MethodPost,
+			URL:    stubURL,
+			Body:   io.NopCloser(strings.NewReader("{ \"Value\": \"body-content\"}")),
+		}
+		c.Params = gin.Params{
+			gin.Param{
+				Key:   "key1",
+				Value: "-must-be-provided-",
+			},
+			gin.Param{
+				Key:   "key2",
+				Value: "1234",
+			},
+		}
+
+		handler := New1ArgHandler(func(ctx context.Context, request TestRequestBody, arg1 PathParameters) (*Response[string], serr.Error) {
+			assert.Equal(t, "body-content", request.Value)
+			assert.Equal(t, 1234, *request.Key2)
+			assert.Equal(t, "-must-be-provided-", request.Key1)
+			return SimpleResponse("ok"), nil
+
+		}, HandlerConfig{
+			Path:           "/api/key1/:key1/key2/:key2",
+			Method:         http.MethodGet,
+			AuthZValidator: nil,
+		}).RegisterBeforeValidationHandler(func(body *TestRequestBody, arg1 *PathParameters) {
+			body.Key1 = arg1.Key1
+			body.Key2 = lo.ToPtr(arg1.Key2)
+		})
+
+		handlerFn := handler.GetGinHandlerFn(s.log, validator.New(), &handlerDTO{
+			AuthOptOut: true,
 		})
 		handlerFn(c)
 		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
@@ -598,4 +720,10 @@ func ExtractResponse[RESPONSE any](t *testing.T, recorder *httptest.ResponseReco
 		t.Fatalf("Failed unmarshel response body to serr.ResponseContract")
 	}
 	return response
+}
+
+type TestRequestBody struct {
+	Value string `validate:"required"`
+	Key1  string `validate:"required,min=10"`
+	Key2  *int   `validate:"required"`
 }
