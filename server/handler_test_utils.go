@@ -167,3 +167,11 @@ func (h *HandlerTestContext) BuildHandler(t *testing.T) (*gin.Context, gin.Handl
 
 	return h.ginContext, h.selectedHandler.GetGinHandlerFn(h.logger, h.validate, cfg), h.recorder
 }
+
+func ExtractResponseDataAndCode[TYPE any](t *testing.T, r *httptest.ResponseRecorder) (*TYPE, int) {
+	var responseBody TYPE
+	if err := json.Unmarshal(r.Body.Bytes(), &responseBody); err != nil {
+		t.Fatal("failed to unmarshal body", err)
+	}
+	return &responseBody, r.Code
+}
