@@ -166,57 +166,9 @@ func newHandlerRegistry(name string, logger *zap.SugaredLogger, requestValidator
 	for _, collection := range controllerCollections {
 		for _, c := range collection {
 			for _, h := range c.Handlers() {
-				var validators []AuthZValidatorFn
-				hDTO := &handlerDTO{
-					Path:            strings.TrimSuffix(strings.TrimSpace(h.Config().Path), "/"),
-					Method:          strings.TrimSpace(h.Config().Method),
-					AuthZValidators: validators,
-					AuthOptOut:      h.Config().AuthOptOut,
-					StatusCode:      h.Config().StatusCode,
-					Default:         h.Config().Default,
-				}
-
-				if h.Config().AuthZValidator != nil {
-					validators = append(validators, h.Config().AuthZValidator)
-				}
-
-				// Configure the Path with the controller provided prefix if present
-				if c, ok := c.(IControllerPrefix); ok {
-					if c.Prefix() != "" {
-						tPath := strings.TrimPrefix(strings.TrimSpace(h.Config().Path), "/")
-						np := strings.TrimSuffix(fmt.Sprintf("%s/%s", c.Prefix(), tPath), "/")
-						hDTO.Path = np
-					}
-				}
-
-				// Prepend the controller validator if defined, so that the controller validator is called first.
-				if c, ok := c.(IControllerAuthZValidator); ok {
-					validators = append([]AuthZValidatorFn{c.AuthZValidator}, validators...)
-				}
-
-				if h.Config().Produces != "" {
-					hDTO.Produces = h.Config().Produces
-				} else {
-					hDTO.Produces = "application/json"
-				}
-
-				if h.Config().Consumes != "" {
-					hDTO.Consumes = h.Config().Consumes
-				} else {
-					hDTO.Consumes = "application/json"
-				}
-
-				mt, err := contenttype.ParseMediaType(hDTO.Produces)
+				hDTO, err := configureHandler(h, c, logger, requestValidator)
 				if err != nil {
-					return nil, multierr.Append(
-						fmt.Errorf("failed to process mime type (%s) for handler with method: %s, path: %s", hDTO.Produces, hDTO.Method, hDTO.Path),
-						err,
-					)
-				}
-				hDTO.MediaType = mt
-
-				if hDTO.StatusCode == 0 {
-					hDTO.StatusCode = http.StatusOK
+					return nil, err
 				}
 
 				key := handlerDTOKey{
@@ -232,7 +184,6 @@ func newHandlerRegistry(name string, logger *zap.SugaredLogger, requestValidator
 					return nil, fmt.Errorf("failed to register hander for [Path: %s, Method: %s, Produces: %s] there was already a registered handler", hDTO.Path, hDTO.Method, hDTO.Produces)
 				}
 
-				hDTO.HandlerFn = h.GetGinHandlerFn(logger, requestValidator, hDTO)
 				registryData[key][hDTO.Produces] = hDTO
 			}
 		}
@@ -243,4 +194,63 @@ func newHandlerRegistry(name string, logger *zap.SugaredLogger, requestValidator
 		logger: logger,
 		data:   registryData,
 	}, nil
+}
+
+func configureHandler(handler Handler, controller IController, logger *zap.SugaredLogger, requestValidator *validator.Validate) (*handlerDTO, error) {
+	var validators []AuthZValidatorFn
+	hDTO := &handlerDTO{
+		Path:            strings.TrimSuffix(strings.TrimSpace(handler.Config().Path), "/"),
+		Method:          strings.TrimSpace(handler.Config().Method),
+		AuthZValidators: validators,
+		AuthOptOut:      handler.Config().AuthOptOut,
+		StatusCode:      handler.Config().StatusCode,
+		Default:         handler.Config().Default,
+	}
+
+	if handler.Config().AuthZValidator != nil {
+		validators = append(validators, handler.Config().AuthZValidator)
+	}
+
+	// Configure the Path with the controller provided prefix if present
+	if c, ok := controller.(IControllerPrefix); ok {
+		if c.Prefix() != "" {
+			tPath := strings.TrimPrefix(strings.TrimSpace(handler.Config().Path), "/")
+			np := strings.TrimSuffix(fmt.Sprintf("%s/%s", c.Prefix(), tPath), "/")
+			hDTO.Path = np
+		}
+	}
+
+	// Prepend the controller validator if defined, so that the controller validator is called first.
+	if c, ok := controller.(IControllerAuthZValidator); ok {
+		validators = append([]AuthZValidatorFn{c.AuthZValidator}, validators...)
+	}
+
+	if handler.Config().Produces != "" {
+		hDTO.Produces = handler.Config().Produces
+	} else {
+		hDTO.Produces = "application/json"
+	}
+
+	if handler.Config().Consumes != "" {
+		hDTO.Consumes = handler.Config().Consumes
+	} else {
+		hDTO.Consumes = "application/json"
+	}
+
+	mt, err := contenttype.ParseMediaType(hDTO.Produces)
+	if err != nil {
+		return nil, multierr.Append(
+			fmt.Errorf("failed to process mime type (%s) for handler with method: %s, path: %s", hDTO.Produces, hDTO.Method, hDTO.Path),
+			err,
+		)
+	}
+	hDTO.MediaType = mt
+
+	if hDTO.StatusCode == 0 {
+		hDTO.StatusCode = http.StatusOK
+	}
+
+	hDTO.HandlerFn = handler.GetGinHandlerFn(logger, requestValidator, hDTO)
+
+	return hDTO, nil
 }

@@ -53,6 +53,8 @@ type (
 		AuthOptOut bool
 		// AuthZValidator see AuthZValidatorFn
 		AuthZValidator AuthZValidatorFn
+		// Label Optional label(name) of the handler
+		Label string
 		// beforeRequestValidate optional function which is given pointers to all request arguments, so they can be combined just before final validation - i.e.
 		// our typical scenarios - request's payload is extended with orgId provided as path parameter. stuffing that into the actual payload may be required for the validation
 		// to pass (i.e. orgId must be supplied and must be uuid type)

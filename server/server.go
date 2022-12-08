@@ -190,6 +190,15 @@ func SimpleResponse[T any](body T) *Response[T] {
 	}
 }
 
+// SimpleResponseWithStatus a convenience function for wrapping a body in a response struct with defaults
+// Use this if you do not need to supply custom headers
+func SimpleResponseWithStatus[T any](body T, status int) *Response[T] {
+	return &Response[T]{
+		Body:       body,
+		StatusCode: status,
+	}
+}
+
 type AuthService interface {
 	VerifyPrincipalAndSetContext(tokenOrRawHeader string, c *gin.Context) error
 }
@@ -213,6 +222,7 @@ func ConfigureAndStartHttpServer(
 	managementControllers managementControllers,
 	as AuthService,
 	md metadata.ApplicationMetadata,
+	requestValidator *validator.Validate,
 	is *info.InfoService,
 ) error {
 	gin.SetMode(gin.ReleaseMode)
@@ -221,18 +231,18 @@ func ConfigureAndStartHttpServer(
 		var controllers []IController
 		controllers = append(controllers, serverControllers.Controllers...)
 		controllers = append(controllers, managementControllers.Controllers...)
-		err := configureServer("http", lc, config.HTTP, config.RequestLogging, config.SPA, as, logger, ms, md, is, true, controllers...)
+		err := configureServer("http", lc, config.HTTP, config.RequestLogging, config.SPA, as, logger, ms, md, is, true, requestValidator, controllers...)
 		if err != nil {
 			return err
 		}
 		return nil
 	}
 
-	err := configureServer("http", lc, config.HTTP, config.RequestLogging, config.SPA, as, logger, ms, md, is, false, serverControllers.Controllers...)
+	err := configureServer("http", lc, config.HTTP, config.RequestLogging, config.SPA, as, logger, ms, md, is, false, requestValidator, serverControllers.Controllers...)
 	if err != nil {
 		return err
 	}
-	err = configureServer("management", lc, config.Management, config.RequestLogging, config.SPA, as, logger, ms, md, is, true, managementControllers.Controllers...)
+	err = configureServer("management", lc, config.Management, config.RequestLogging, config.SPA, as, logger, ms, md, is, true, requestValidator, managementControllers.Controllers...)
 	if err != nil {
 		return err
 	}
@@ -251,6 +261,7 @@ func configureServer(
 	md metadata.ApplicationMetadata,
 	is *info.InfoService,
 	handlesManagement bool,
+	requestValidator *validator.Validate,
 	controllers ...IController,
 ) error {
 	g := gin.New()
@@ -265,8 +276,6 @@ func configureServer(
 	if requestLoggingConfig.Enabled {
 		g.Use(requestLogger(logger, requestLoggingConfig))
 	}
-
-	requestValidator := validator.New()
 
 	authNotEnforcedGroup := g.Group(httpConfig.Prefix)
 
