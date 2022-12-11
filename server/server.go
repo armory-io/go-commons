@@ -63,6 +63,11 @@ type (
 		AuthZValidator(p *iam.ArmoryCloudPrincipal) (string, bool)
 	}
 
+	// IControllerAuthZValidatorV2 an IController can implement this interface to apply a common AuthZ validator to all exported handlers
+	IControllerAuthZValidatorV2 interface {
+		AuthZValidator(ctx context.Context, p *iam.ArmoryCloudPrincipal) (string, bool)
+	}
+
 	// Controller the expected way of defining endpoint collections for an Armory application
 	// See the bellow example and IController, IControllerPrefix, IControllerAuthZValidator for options
 	//
@@ -423,7 +428,7 @@ func authorizeRequest(ctx context.Context, h *handlerDTO) serr.Error {
 
 	for _, authZValidator := range h.AuthZValidators {
 		// If the handler has provided an AuthZ Validation Function, execute it.
-		if msg, authorized := authZValidator(principal); !authorized {
+		if msg, authorized := authZValidator(ctx, principal); !authorized {
 			return serr.NewErrorResponseFromApiError(principalNotAuthorized, serr.WithErrorMessage(msg))
 		}
 	}
@@ -442,6 +447,8 @@ type RequestDetails struct {
 	// ex: path: if the path was defined as "/customer/:id" and the request was for "/customer/foo"
 	// PathParameters["id"] would equal "foo"
 	PathParameters map[string]string
+	// RequestPath the string representing requested resources i.e. /api/v1/organizations/:orgID/...
+	RequestPath string
 }
 
 type requestDetailsKey struct{}
@@ -574,16 +581,25 @@ func ginHOF[REQUEST, RESPONSE any](
 			}
 		}()
 
+		var pathParameters = make(map[string]string)
+		for _, p := range c.Params {
+			pathParameters[p.Key] = p.Value
+		}
+
+		// Stuff Request details into the context
+		requestDetails := RequestDetails{
+			QueryParameters: c.Request.URL.Query(),
+			PathParameters:  pathParameters,
+			Headers:         c.Request.Header,
+			RequestPath:     c.Request.URL.Path,
+		}
+		c.Request = c.Request.WithContext(AddRequestDetailsToCtx(c.Request.Context(), requestDetails))
+
 		if !handler.AuthOptOut {
 			if err := authorizeRequest(c.Request.Context(), handler); err != nil {
 				writeAndLogApiErrorThenAbort(c, err, logger)
 				return
 			}
-		}
-
-		var pathParameters = make(map[string]string)
-		for _, p := range c.Params {
-			pathParameters[p.Key] = p.Value
 		}
 
 		req, shouldProcessBody, apiError := extractRequestBody[REQUEST](c)
@@ -595,14 +611,6 @@ func ginHOF[REQUEST, RESPONSE any](
 		if nil == extractRequestArgsFn {
 			extractRequestArgsFn = extractArgsFromRequest1[REQUEST]
 		}
-
-		// Stuff Request details into the context
-		requestDetails := RequestDetails{
-			QueryParameters: c.Request.URL.Query(),
-			PathParameters:  pathParameters,
-			Headers:         c.Request.Header,
-		}
-		c.Request = c.Request.WithContext(AddRequestDetailsToCtx(c.Request.Context(), requestDetails))
 
 		args, apiError := extractRequestArgsFn(c.Request.Context(), req)
 		if apiError != nil {

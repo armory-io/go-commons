@@ -17,7 +17,9 @@
 package server
 
 import (
+	"context"
 	"fmt"
+	"github.com/armory-io/go-commons/iam"
 	"github.com/armory-io/go-commons/management/info"
 	"github.com/armory-io/go-commons/server/serr"
 	"github.com/elnormous/contenttype"
@@ -41,7 +43,7 @@ type (
 	handlerDTO struct {
 		Path            string                `json:"-"`
 		Method          string                `json:"method"`
-		AuthZValidators []AuthZValidatorFn    `json:"-"`
+		AuthZValidators []AuthZValidatorV2Fn  `json:"-"`
 		AuthOptOut      bool                  `json:"authOptOut"`
 		Consumes        string                `json:"consumes"`
 		Produces        string                `json:"produces"`
@@ -197,7 +199,7 @@ func newHandlerRegistry(name string, logger *zap.SugaredLogger, requestValidator
 }
 
 func configureHandler(handler Handler, controller IController, logger *zap.SugaredLogger, requestValidator *validator.Validate) (*handlerDTO, error) {
-	var validators []AuthZValidatorFn
+	var validators []AuthZValidatorV2Fn
 	hDTO := &handlerDTO{
 		Path:            strings.TrimSuffix(strings.TrimSpace(handler.Config().Path), "/"),
 		Method:          strings.TrimSpace(handler.Config().Method),
@@ -208,7 +210,14 @@ func configureHandler(handler Handler, controller IController, logger *zap.Sugar
 	}
 
 	if handler.Config().AuthZValidator != nil {
-		validators = append(validators, handler.Config().AuthZValidator)
+		var simpleHandler AuthZValidatorV2Fn
+		simpleHandler = func(c context.Context, p *iam.ArmoryCloudPrincipal) (string, bool) {
+			return handler.Config().AuthZValidator(p)
+		}
+		validators = append(validators, simpleHandler)
+	}
+	if handler.Config().AuthZValidatorExtended != nil {
+		validators = append(validators, handler.Config().AuthZValidatorExtended)
 	}
 
 	// Configure the Path with the controller provided prefix if present
@@ -222,7 +231,15 @@ func configureHandler(handler Handler, controller IController, logger *zap.Sugar
 
 	// Prepend the controller validator if defined, so that the controller validator is called first.
 	if c, ok := controller.(IControllerAuthZValidator); ok {
-		validators = append([]AuthZValidatorFn{c.AuthZValidator}, validators...)
+		var simpleHandler AuthZValidatorV2Fn
+
+		simpleHandler = func(ctx context.Context, p *iam.ArmoryCloudPrincipal) (string, bool) {
+			return c.AuthZValidator(p)
+		}
+		validators = append(validators, simpleHandler)
+	}
+	if c, ok := controller.(IControllerAuthZValidatorV2); ok {
+		validators = append(validators, c.AuthZValidator)
 	}
 
 	if handler.Config().Produces != "" {

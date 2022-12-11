@@ -53,6 +53,8 @@ type (
 		AuthOptOut bool
 		// AuthZValidator see AuthZValidatorFn
 		AuthZValidator AuthZValidatorFn
+		// AuthZValidatorExtended see AuthZValidatorV2Fn
+		AuthZValidatorExtended AuthZValidatorV2Fn
 		// Label Optional label(name) of the handler
 		Label string
 		// beforeRequestValidate optional function which is given pointers to all request arguments, so they can be combined just before final validation - i.e.
@@ -65,6 +67,12 @@ type (
 	// return true if the user is authorized
 	// return false if the user is NOT authorized and a string indicated the reason.
 	AuthZValidatorFn func(p *iam.ArmoryCloudPrincipal) (string, bool)
+
+	// AuthZValidatorV2Fn a function that takes the authenticated principal and passes current context, so you can make auth
+	// decision based on the additional conditions (i.e. headers, path parameters, etc. )
+	// return true if the user is authorized
+	// return false if the user is NOT authorized
+	AuthZValidatorV2Fn func(ctx context.Context, p *iam.ArmoryCloudPrincipal) (string, bool)
 
 	beforeRequestValidateFn func(ctx context.Context)
 
