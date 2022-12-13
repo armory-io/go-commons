@@ -163,6 +163,10 @@ type (
 	// Void an empty struct that can be used as a placeholder for requests/responses that do not have a body
 	Void struct{}
 
+	Raw struct {
+		Payload []byte
+	}
+
 	// Response The response wrapper for a handler response to be return to the client of the request
 	// StatusCode If set then it takes precedence to the default status code for the handler.
 	// Headers Any values set here will be added to the response sent to the client, if Content-Type is set here then
@@ -707,8 +711,14 @@ func extractRequestBody[REQUEST any](c *gin.Context) (*REQUEST, bool, serr.Error
 		if err != nil {
 			return nil, shouldProcessBody, serr.NewErrorResponseFromApiError(errFailedToReadRequest, serr.WithCause(err))
 		}
-		if err := json.Unmarshal(b, &req); err != nil {
-			return nil, shouldProcessBody, handleUnmarshalError(b, err)
+		if reflect.TypeOf(req).String() == "server.Raw" {
+			var ptr interface{} = &req
+			rawPayload := ptr.(*Raw)
+			rawPayload.Payload = b
+		} else {
+			if err := json.Unmarshal(b, &req); err != nil {
+				return nil, shouldProcessBody, handleUnmarshalError(b, err)
+			}
 		}
 	}
 	return &req, shouldProcessBody, nil
