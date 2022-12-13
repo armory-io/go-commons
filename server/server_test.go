@@ -117,8 +117,8 @@ func (s *ServerTestSuite) TestGinHOF() {
 		}))
 
 		ginHOF(noop, nil, &handlerDTO{
-			AuthZValidators: []AuthZValidatorFn{
-				func(p *iam.ArmoryCloudPrincipal) (string, bool) {
+			AuthZValidators: []AuthZValidatorV2Fn{
+				func(_ context.Context, p *iam.ArmoryCloudPrincipal) (string, bool) {
 					return "the principal is invalid", false
 				},
 			},
@@ -517,6 +517,34 @@ func (s *ServerTestSuite) TestGinHOF() {
 		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
 	})
 
+	s.T().Run("parametrized handler will get context parameters from headers", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		stubURL, _ := url.ParseRequestURI("https://example.com")
+		c.Request = &http.Request{
+			Header: map[string][]string{
+				"x-org-id": []string{"header-value"},
+			},
+			Method: http.MethodGet,
+			URL:    stubURL,
+		}
+		handler := New1ArgHandler(func(ctx context.Context, request Void, arg1 HeaderParameters) (*Response[string], serr.Error) {
+			assert.Equal(t, "header-value", arg1.QueryParameter[0])
+			return SimpleResponse("ok"), nil
+
+		}, HandlerConfig{
+			Path:           "/api",
+			Method:         http.MethodGet,
+			AuthZValidator: nil,
+		})
+
+		handlerFn := handler.GetGinHandlerFn(s.log, nil, &handlerDTO{
+			AuthOptOut: true,
+		})
+		handlerFn(c)
+		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
+	})
+
 	s.T().Run("parametrized handler will get armory principal as argument", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(recorder)
@@ -686,6 +714,14 @@ type QueryParameters struct {
 
 func (QueryParameters) Source() ArgumentDataSource {
 	return QueryContextSource
+}
+
+type HeaderParameters struct {
+	QueryParameter []string `mapstructure:"x-org-id"`
+}
+
+func (HeaderParameters) Source() ArgumentDataSource {
+	return HeaderContextSource
 }
 
 type Widget struct {

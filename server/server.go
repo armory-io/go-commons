@@ -481,8 +481,9 @@ var (
 		HttpStatusCode: http.StatusInternalServerError,
 	}
 
-	extractPathDetails  = func(details *RequestDetails) any { return details.PathParameters }
-	extractQueryDetails = func(details *RequestDetails) any { return details.QueryParameters }
+	extractPathDetails   = func(details *RequestDetails) any { return details.PathParameters }
+	extractQueryDetails  = func(details *RequestDetails) any { return details.QueryParameters }
+	extractHeaderDetails = func(details *RequestDetails) any { return details.Headers }
 )
 
 // ExtractRequestDetailsFromContext fetches the server.RequestDetails from the context
@@ -519,6 +520,12 @@ func ExtractPathParamsFromRequestContext[T any](ctx context.Context) (*T, serr.E
 func ExtractQueryParamsFromRequestContext[T any](ctx context.Context) (*T, serr.Error) {
 	var result T
 	err := extract[T](ctx, extractQueryDetails, &result)
+	return &result, err
+}
+
+func ExtractHeaderParamsFromRequestContext[T any](ctx context.Context) (*T, serr.Error) {
+	var result T
+	err := extract[T](ctx, extractHeaderDetails, &result)
 	return &result, err
 }
 
@@ -923,6 +930,19 @@ func requestLogger(log *zap.SugaredLogger, config RequestLoggingConfiguration) g
 }
 
 func extractHandlerArgumentFromContext[CTX HandlerArgument](c context.Context) (*CTX, serr.Error) {
+	result, err := extractHandlerArgumentFromContextInternal[CTX](c)
+	if result != nil {
+		var ptr interface{} = result
+		if validatable, ok := ptr.(ValidatableHandlerArgument); ok {
+			if !validatable.Check() {
+				return nil, serr.NewSimpleErrorWithStatusCode(fmt.Sprintf("validation of %s failed", reflect.TypeOf(result).String()), http.StatusBadRequest, nil)
+			}
+		}
+	}
+	return result, err
+}
+
+func extractHandlerArgumentFromContextInternal[CTX HandlerArgument](c context.Context) (*CTX, serr.Error) {
 	var arg CTX
 	switch arg.Source() {
 
@@ -932,6 +952,10 @@ func extractHandlerArgumentFromContext[CTX HandlerArgument](c context.Context) (
 
 	case QueryContextSource:
 		err := extract(c, extractQueryDetails, &arg)
+		return &arg, err
+
+	case HeaderContextSource:
+		err := extract(c, extractHeaderDetails, &arg)
 		return &arg, err
 
 	case AuthContextSource:

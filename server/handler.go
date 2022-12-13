@@ -89,6 +89,11 @@ type (
 		Source() ArgumentDataSource
 	}
 
+	ValidatableHandlerArgument interface {
+		HandlerArgument
+		Check() bool
+	}
+
 	ArmoryPrincipalArgument struct {
 		*iam.ArmoryCloudPrincipal
 	}
@@ -112,10 +117,11 @@ type (
 )
 
 const (
-	voidArgumentSource ArgumentDataSource = -1
-	PathContextSource                     = 0
-	QueryContextSource                    = 1
-	AuthContextSource                     = 2
+	voidArgumentSource  ArgumentDataSource = -1
+	PathContextSource                      = 0
+	QueryContextSource                     = 1
+	HeaderContextSource                    = 2
+	AuthContextSource                      = 20
 )
 
 func (r *handler[REQUEST, RESPONSE]) Config() HandlerConfig {
