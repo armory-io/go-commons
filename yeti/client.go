@@ -35,8 +35,8 @@ func NewClient(ctx context.Context, log *zap.SugaredLogger, config ClientConfigu
 	return &Client{http: h}, nil
 }
 
-func (yc *Client) FetchUserRoles(orgID, envID, userID string) ([]Role, error) {
-	req, err := yc.http.NewRequest(http.MethodGet, fmt.Sprintf("/organizations/%s/environments/%s/users/%s/roles", orgID, envID, userID), nil)
+func (yc *Client) FetchOrgRoles(orgID string) ([]Role, error) {
+	req, err := yc.http.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/organizations/%s/roles", orgID), nil)
 	if err != nil {
 		return nil, err
 	}
