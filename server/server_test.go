@@ -696,6 +696,34 @@ func (s *ServerTestSuite) TestGinHOF() {
 		handlerFn(c)
 		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
 	})
+
+	s.T().Run("handler will work with []string body", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		stubURL, _ := url.ParseRequestURI("https://example.com")
+		c.Request = &http.Request{
+			Header: map[string][]string{},
+			Method: http.MethodPost,
+			URL:    stubURL,
+			Body:   io.NopCloser(strings.NewReader("[ \"arg1\", \"arg2\"]")),
+		}
+		handler := NewHandler(func(ctx context.Context, request []string) (*Response[string], serr.Error) {
+			assert.Equal(t, "arg1", request[0])
+			assert.Equal(t, "arg2", request[1])
+			return SimpleResponse("ok"), nil
+
+		}, HandlerConfig{
+			Path:           "",
+			Method:         http.MethodPost,
+			AuthZValidator: nil,
+		})
+
+		handlerFn := handler.GetGinHandlerFn(s.log, nil, &handlerDTO{
+			AuthOptOut: true,
+		})
+		handlerFn(c)
+		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
+	})
 }
 
 type PathParameters struct {

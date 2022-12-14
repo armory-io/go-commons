@@ -613,7 +613,7 @@ func ginHOF[REQUEST, RESPONSE any](
 			}
 		}
 
-		req, shouldProcessBody, apiError := extractRequestBody[REQUEST](c)
+		req, shouldValidateBody, apiError := extractRequestBody[REQUEST](c)
 		if apiError != nil {
 			writeAndLogApiErrorThenAbort(c, apiError, logger)
 			return
@@ -634,17 +634,17 @@ func ginHOF[REQUEST, RESPONSE any](
 			extensions.BeforeRequestValidate(c.Request.Context())
 		}
 
-		if shouldProcessBody {
+		if shouldValidateBody {
 			apiError = validateRequestBody(req, requestValidator)
 			if nil != apiError {
 				writeAndLogApiErrorThenAbort(c, apiError, logger)
 				return
 			}
-		}
 
-		if err := defaults.Set(req); err != nil {
-			apiError = serr.NewErrorResponseFromApiError(errFailedToSetRequestDefaults, serr.WithCause(err))
-			writeAndLogApiErrorThenAbort(c, apiError, logger)
+			if err := defaults.Set(req); err != nil {
+				apiError = serr.NewErrorResponseFromApiError(errFailedToSetRequestDefaults, serr.WithCause(err))
+				writeAndLogApiErrorThenAbort(c, apiError, logger)
+			}
 		}
 
 		response, apiError := handlerFn(c.Request.Context(), *req)
@@ -695,15 +695,23 @@ func ginHOF[REQUEST, RESPONSE any](
 func extractRequestBody[REQUEST any](c *gin.Context) (*REQUEST, bool, serr.Error) {
 	var req REQUEST
 	shouldProcessBody := false
+	isArrayType := false
+	typeName := lo.IfF(reflect.TypeOf(req) != nil, func() string {
+		t := reflect.TypeOf(req)
+		isArrayType = t.Kind() == reflect.Array || t.Kind() == reflect.Slice
+		return reflect.TypeOf(req).String()
+	}).Else("server.Void")
+
 	switch c.Request.Method {
 	case http.MethodGet, http.MethodDelete:
 		shouldProcessBody = false
 	case http.MethodPost, http.MethodPut, http.MethodPatch:
-		shouldProcessBody = reflect.TypeOf(req) != nil && reflect.TypeOf(req).String() != "server.Void"
+		shouldProcessBody = typeName != "server.Void"
 	default:
 		return nil, false, serr.NewErrorResponseFromApiError(errMethodNotAllowed)
 	}
 	if shouldProcessBody {
+		shouldProcessBody = !isArrayType
 		if c.Request.Body == nil {
 			return nil, shouldProcessBody, serr.NewErrorResponseFromApiError(errBodyRequired)
 		}
@@ -711,7 +719,7 @@ func extractRequestBody[REQUEST any](c *gin.Context) (*REQUEST, bool, serr.Error
 		if err != nil {
 			return nil, shouldProcessBody, serr.NewErrorResponseFromApiError(errFailedToReadRequest, serr.WithCause(err))
 		}
-		if reflect.TypeOf(req).String() == "server.Raw" {
+		if typeName == "server.Raw" {
 			var ptr interface{} = &req
 			rawPayload := ptr.(*Raw)
 			rawPayload.Payload = b
