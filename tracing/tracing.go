@@ -27,19 +27,22 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 	"go.uber.org/fx"
+	"go.uber.org/zap"
 )
 
-type NewRelicConfiguration struct {
-	Enabled bool
-	APIKey  string
+type PushConfiguration struct {
+	Enabled  bool
+	Endpoint string
+	APIKey   string
 }
 
 type Configuration struct {
-	NewRelic NewRelicConfiguration
+	Push PushConfiguration
 }
 
 func InitTracing(
 	ctx context.Context,
+	logger *zap.SugaredLogger,
 	lc fx.Lifecycle,
 	app metadata.ApplicationMetadata,
 	config Configuration,
@@ -53,22 +56,26 @@ func InitTracing(
 			semconv.DeploymentEnvironmentKey.String(app.Environment),
 		),
 	)
+	if err != nil {
+		return err
+	}
 
 	tracingOpts := []sdktrace.TracerProviderOption{
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 		sdktrace.WithResource(res),
 	}
 
-	var exporter *otlptrace.Exporter
-	if config.NewRelic.Enabled {
+	if config.Push.Enabled {
+		logger.Info("Initializing OTEL tracing...")
 		client := otlptracehttp.NewClient(
 			otlptracehttp.WithHeaders(map[string]string{
-				"api-key": config.NewRelic.APIKey,
+				"api-key": config.Push.APIKey,
 			}),
-			otlptracehttp.WithEndpoint("otlp.nr-data.net:4318"),
+			otlptracehttp.WithEndpoint(config.Push.Endpoint),
 			otlptracehttp.WithURLPath("v1/traces"),
 		)
-		exporter, err = otlptrace.New(ctx, client)
+
+		exporter, err := otlptrace.New(ctx, client)
 		if err != nil {
 			return err
 		}
@@ -77,9 +84,6 @@ func InitTracing(
 
 	tracerProvider := sdktrace.NewTracerProvider(tracingOpts...)
 
-	if err != nil {
-		return err
-	}
 	otel.SetTracerProvider(tracerProvider)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 

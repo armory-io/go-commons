@@ -21,27 +21,33 @@ import (
 func TestOptionsFromSettings(t *testing.T) {
 	logger := NewZapAdapter(zap.New(nil))
 
-	_, err := optionsFromSettings(logger, Configuration{
-		TemporalCloudEnabled: true,
+	_, err := optionsFromParams(logger, ProviderParameters{
+		Config: Configuration{
+			TemporalCloudEnabled: true,
+		},
 	})
 	assert.Error(t, err, "no client key")
 
-	_, err = optionsFromSettings(logger, Configuration{
-		TemporalCloudEnabled: true,
-		KeyPath:              "/path/to/key",
+	_, err = optionsFromParams(logger, ProviderParameters{
+		Config: Configuration{
+			TemporalCloudEnabled: true,
+			KeyPath:              "/path/to/key",
+		},
 	})
 	assert.Error(t, err, "no client cert")
 
-	_, err = optionsFromSettings(logger, Configuration{
-		TemporalCloudEnabled:        true,
-		CertPath:                    "/path/to/key",
-		KeyPath:                     "/path/to/cert",
-		ClientSideEncryptionEnabled: true,
-		ClientSideEncryptionCMKARNs: "",
+	_, err = optionsFromParams(logger, ProviderParameters{
+		Config: Configuration{
+			TemporalCloudEnabled:        true,
+			CertPath:                    "/path/to/key",
+			KeyPath:                     "/path/to/cert",
+			ClientSideEncryptionEnabled: true,
+			ClientSideEncryptionCMKARNs: "",
+		},
 	})
 	assert.Error(t, err, "no cmk arns provided")
 
-	c, err := optionsFromSettings(logger, Configuration{})
+	c, err := optionsFromParams(logger, ProviderParameters{})
 	assert.NoError(t, err)
 	assert.NotNil(t, c)
 
@@ -65,13 +71,15 @@ func TestOptionsFromSettings(t *testing.T) {
 	_, err = io.Copy(keyFile, bytes.NewReader(key))
 	assert.NoError(t, err)
 
-	c, err = optionsFromSettings(logger, Configuration{
-		TemporalCloudEnabled:        true,
-		Namespace:                   "armory-cloud-staging",
-		CertPath:                    certPath,
-		KeyPath:                     keyPath,
-		ClientSideEncryptionEnabled: true,
-		ClientSideEncryptionCMKARNs: "arns",
+	c, err = optionsFromParams(logger, ProviderParameters{
+		Config: Configuration{
+			TemporalCloudEnabled:        true,
+			Namespace:                   "armory-cloud-staging",
+			CertPath:                    certPath,
+			KeyPath:                     keyPath,
+			ClientSideEncryptionEnabled: true,
+			ClientSideEncryptionCMKARNs: "arns",
+		},
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, c)
