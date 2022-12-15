@@ -23,7 +23,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/zap"
-	"net/http"
 )
 
 type (
@@ -62,6 +61,8 @@ type (
 		// our typical scenarios - request's payload is extended with orgId provided as path parameter. stuffing that into the actual payload may be required for the validation
 		// to pass (i.e. orgId must be supplied and must be uuid type)
 		beforeRequestValidate beforeRequestValidateFn
+		// responseProcessors - optional collection of response processors
+		responseProcessors []ResponseProcessorFn
 	}
 
 	// AuthZValidatorFn a function that takes the authenticated principal and returns whether the principal is authorized.
@@ -99,14 +100,6 @@ type (
 		*iam.ArmoryCloudPrincipal
 	}
 
-	RawRequestArgument struct {
-		Request *http.Request
-	}
-
-	RawResponseWriterArgument struct {
-		Response http.ResponseWriter
-	}
-
 	voidArgument struct{}
 
 	ArgumentDataSource int
@@ -126,13 +119,11 @@ type (
 )
 
 const (
-	voidArgumentSource       ArgumentDataSource = -1
-	PathContextSource                           = 0
-	QueryContextSource                          = 1
-	HeaderContextSource                         = 2
-	authContextSource                           = 200
-	rawRequestContextSource                     = 201
-	rawResponseContextSource                    = 202
+	voidArgumentSource  ArgumentDataSource = -1
+	PathContextSource                      = 0
+	QueryContextSource                     = 1
+	HeaderContextSource                    = 2
+	authContextSource                      = 200
 )
 
 func (r *handler[REQUEST, RESPONSE]) Config() HandlerConfig {
@@ -152,14 +143,6 @@ func (ArmoryPrincipalArgument) Source() ArgumentDataSource {
 
 func (voidArgument) Source() ArgumentDataSource {
 	return voidArgumentSource
-}
-
-func (RawRequestArgument) Source() ArgumentDataSource {
-	return rawRequestContextSource
-}
-
-func (RawResponseWriterArgument) Source() ArgumentDataSource {
-	return rawResponseContextSource
 }
 
 // NewHandler creates a Handler from a handler function and server.HandlerConfig
@@ -251,5 +234,10 @@ func (r *Handler4Extensions[REQUEST, RESPONSE, ARG1, ARG2, ARG3]) RegisterBefore
 		args := referenceArguments[REQUEST, ARG1, ARG2, ARG3](ctx)
 		beforeValidation(args.Request, args.Arg1, args.Arg2, args.Arg3)
 	}
+	return r
+}
+
+func (r *handler[REQUEST, RESPONSE]) RegisterResponseProcessor(processor ResponseProcessorFn) *handler[REQUEST, RESPONSE] {
+	r.config.responseProcessors = append(r.config.responseProcessors, processor)
 	return r
 }

@@ -41,16 +41,17 @@ type (
 	}
 
 	handlerDTO struct {
-		Path            string                `json:"-"`
-		Method          string                `json:"method"`
-		AuthZValidators []AuthZValidatorV2Fn  `json:"-"`
-		AuthOptOut      bool                  `json:"authOptOut"`
-		Consumes        string                `json:"consumes"`
-		Produces        string                `json:"produces"`
-		StatusCode      int                   `json:"statusCode"`
-		HandlerFn       gin.HandlerFunc       `json:"-"`
-		MediaType       contenttype.MediaType `json:"-"`
-		Default         bool                  `json:"default"`
+		Path               string                `json:"-"`
+		Method             string                `json:"method"`
+		AuthZValidators    []AuthZValidatorV2Fn  `json:"-"`
+		AuthOptOut         bool                  `json:"authOptOut"`
+		Consumes           string                `json:"consumes"`
+		Produces           string                `json:"produces"`
+		StatusCode         int                   `json:"statusCode"`
+		HandlerFn          gin.HandlerFunc       `json:"-"`
+		MediaType          contenttype.MediaType `json:"-"`
+		Default            bool                  `json:"default"`
+		ResponseProcessors []ResponseProcessorFn `json:"-"`
 	}
 )
 
@@ -241,6 +242,28 @@ func configureHandler(handler Handler, controller IController, logger *zap.Sugar
 	if c, ok := controller.(IControllerAuthZValidatorV2); ok {
 		validators = append(validators, c.AuthZValidator)
 	}
+
+	var iResponseProcessors []ResponseProcessorWithOrder
+	if c, ok := controller.(IControllerPostResponseProcessor); ok {
+		iResponseProcessors = c.ResponseProcessors()
+	}
+
+	sort.Slice(iResponseProcessors, func(i, j int) bool {
+		a := iResponseProcessors[i]
+		b := iResponseProcessors[j]
+		return a.Order < b.Order
+	})
+
+	processors := lo.Map(iResponseProcessors, func(processor ResponseProcessorWithOrder, _ int) ResponseProcessorFn {
+		return processor.Processor
+	})
+
+	perHandlerProcessors := handler.Config().responseProcessors
+	if len(perHandlerProcessors) > 0 {
+		processors = append(processors, perHandlerProcessors...)
+	}
+
+	hDTO.ResponseProcessors = processors
 
 	if handler.Config().Produces != "" {
 		hDTO.Produces = handler.Config().Produces

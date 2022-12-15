@@ -45,6 +45,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"unsafe"
 )
 
 type (
@@ -56,6 +57,17 @@ type (
 	// IControllerPrefix an IController can implement this interface to have all of its handler func paths prefixed with a common path partial
 	IControllerPrefix interface {
 		Prefix() string
+	}
+
+	ResponseProcessorFn func(ctx context.Context, bytes []byte) ([]byte, serr.Error)
+
+	ResponseProcessorWithOrder struct {
+		Order     int
+		Processor ResponseProcessorFn
+	}
+
+	IControllerPostResponseProcessor interface {
+		ResponseProcessors() []ResponseProcessorWithOrder
 	}
 
 	// IControllerAuthZValidator an IController can implement this interface to apply a common AuthZ validator to all exported handlers
@@ -163,10 +175,6 @@ type (
 	// Void an empty struct that can be used as a placeholder for requests/responses that do not have a body
 	Void struct{}
 
-	Raw struct {
-		Payload []byte
-	}
-
 	// Response The response wrapper for a handler response to be return to the client of the request
 	// StatusCode If set then it takes precedence to the default status code for the handler.
 	// Headers Any values set here will be added to the response sent to the client, if Content-Type is set here then
@@ -189,6 +197,11 @@ type (
 	HandlerExtensionPoints struct {
 		BeforeRequestValidate beforeRequestValidateFn
 	}
+)
+
+var (
+	byteArrayType = reflect.TypeOf([]byte(nil))
+	voidType      = reflect.TypeOf(Void{})
 )
 
 // SimpleResponse a convenience function for wrapping a body in a response struct with defaults
@@ -337,42 +350,117 @@ func configureServer(
 	return nil
 }
 
-func writeResponse(contentType string, body any, w gin.ResponseWriter) serr.Error {
+func writeResponse(ctx context.Context, contentType string, body any, w gin.ResponseWriter, processors []ResponseProcessorFn) serr.Error {
 	w.Header().Set("Content-Type", contentType)
 	switch contentType {
 	case "text/plain", "application/yaml":
-		t := reflect.TypeOf(body)
-		if t.Kind() != reflect.String {
-			return serr.NewErrorResponseFromApiError(serr.APIError{
-				Message:        "Failed to write response",
-				HttpStatusCode: http.StatusInternalServerError,
-			},
-				serr.WithErrorMessage(fmt.Sprintf("Handler specified that it produces %s but didn't return a string as the response", contentType)),
-				serr.WithExtraDetailsForLogging(serr.KVPair{
-					Key:   "actualType",
-					Value: t.String(),
-				}),
-			)
-		}
-		if _, err := w.Write([]byte(body.(string))); err != nil {
-			return serr.NewErrorResponseFromApiError(serr.APIError{
-				Message:        "Failed to write response",
-				HttpStatusCode: http.StatusInternalServerError,
-			}, serr.WithCause(err))
-		}
-		return nil
+		return writeStringResponse(ctx, contentType, body, w, processors)
+	case "application/octet-stream":
+		return writeOctetStream(contentType, body, w)
 	default:
-		if err := json.NewEncoder(w).Encode(body); err != nil {
-			return serr.NewErrorResponseFromApiError(serr.APIError{
-				Message:        "Failed to write response",
-				HttpStatusCode: http.StatusInternalServerError,
-			}, serr.WithCause(err))
-		}
-		return nil
+		return writeJsonResponse(ctx, body, w, processors)
 	}
 }
 
-func validateRequestBody[T interface{}](req *T, v *validator.Validate) serr.Error {
+func writeJsonResponse(ctx context.Context, body any, w gin.ResponseWriter, processors []ResponseProcessorFn) serr.Error {
+	bytes, err := json.Marshal(body)
+	if err != nil {
+		return serr.NewErrorResponseFromApiError(serr.APIError{
+			Message:        "Failed to marshal response",
+			HttpStatusCode: http.StatusInternalServerError,
+		}, serr.WithCause(err))
+	}
+
+	for _, processor := range processors {
+		b, sErr := processor(ctx, bytes)
+		if sErr != nil {
+			return sErr
+		}
+		bytes = b
+	}
+
+	if _, err = w.Write(bytes); err != nil {
+		return serr.NewErrorResponseFromApiError(serr.APIError{
+			Message:        "Failed to write response",
+			HttpStatusCode: http.StatusInternalServerError,
+		}, serr.WithCause(err))
+	}
+
+	return nil
+}
+
+// writeOctetStream expects the body to be an io.ReadCloser, if it is, it will be copied to the response writer.
+// This can probably be refactored later, if needed to allow the body to be a byte[] or Reader vs only allowing ReadCloser.
+func writeOctetStream(contentType string, body any, w gin.ResponseWriter) serr.Error {
+	bodyContent, ok := body.(io.ReadCloser)
+	if !ok {
+		return serr.NewErrorResponseFromApiError(serr.APIError{
+			Message:        "Failed to write response",
+			HttpStatusCode: http.StatusInternalServerError,
+		},
+			serr.WithErrorMessage(fmt.Sprintf("Handler specified that it produces %s but didn't return a ReadCloser as the response", contentType)),
+		)
+	}
+
+	//goland:noinspection GoUnhandledErrorResult
+	defer bodyContent.Close()
+
+	if _, err := io.Copy(w, bodyContent); err != nil {
+		return serr.NewErrorResponseFromApiError(serr.APIError{
+			Message:        "Failed to write response",
+			HttpStatusCode: http.StatusInternalServerError,
+		},
+			serr.WithCause(err),
+			serr.WithErrorMessage("Failed to copy handler body to response writer"),
+		)
+	}
+	return nil
+}
+
+func writeStringResponse(ctx context.Context, contentType string, body any, w gin.ResponseWriter, processors []ResponseProcessorFn) serr.Error {
+	t := reflect.TypeOf(body)
+	canWrite := false
+	bytes := lo.IfF(t.Kind() == reflect.String,
+		func() []byte {
+			canWrite = true
+			return []byte(body.(string))
+		}).ElseF(func() []byte {
+		res, ok := body.([]byte)
+		canWrite = ok
+		return res
+	})
+
+	if !canWrite {
+		return serr.NewErrorResponseFromApiError(serr.APIError{
+			Message:        "Failed to write response",
+			HttpStatusCode: http.StatusInternalServerError,
+		},
+			serr.WithErrorMessage(fmt.Sprintf("Handler specified that it produces %s but didn't return a string or []byte as the response", contentType)),
+			serr.WithExtraDetailsForLogging(serr.KVPair{
+				Key:   "actualType",
+				Value: t.String(),
+			}),
+		)
+	}
+
+	for _, processor := range processors {
+		b, sErr := processor(ctx, bytes)
+		if sErr != nil {
+			return sErr
+		}
+		bytes = b
+	}
+
+	if _, err := w.Write(bytes); err != nil {
+		return serr.NewErrorResponseFromApiError(serr.APIError{
+			Message:        "Failed to write response",
+			HttpStatusCode: http.StatusInternalServerError,
+		}, serr.WithCause(err))
+	}
+	return nil
+}
+
+func validateRequestBody[T any](req T, v *validator.Validate) serr.Error {
 	err := v.Struct(req)
 	if err != nil {
 		vErr, ok := err.(validator.ValidationErrors)
@@ -453,8 +541,6 @@ type RequestDetails struct {
 	PathParameters map[string]string
 	// RequestPath the string representing requested resources i.e. /api/v1/organizations/:orgID/...
 	RequestPath string
-	// ginContext not exposed to public, available for internal use cases when this context is required
-	ginContext *gin.Context
 }
 
 type requestDetailsKey struct{}
@@ -487,10 +573,9 @@ var (
 		HttpStatusCode: http.StatusInternalServerError,
 	}
 
-	extractPathDetails          = func(details *RequestDetails) any { return details.PathParameters }
-	extractQueryDetails         = func(details *RequestDetails) any { return details.QueryParameters }
-	extractHeaderDetails        = func(details *RequestDetails) any { return details.Headers }
-	extractRawGinContextDetails = func(details *RequestDetails) any { return details.ginContext }
+	extractPathDetails   = func(details *RequestDetails) any { return details.PathParameters }
+	extractQueryDetails  = func(details *RequestDetails) any { return details.QueryParameters }
+	extractHeaderDetails = func(details *RequestDetails) any { return details.Headers }
 )
 
 // ExtractRequestDetailsFromContext fetches the server.RequestDetails from the context
@@ -606,7 +691,6 @@ func ginHOF[REQUEST, RESPONSE any](
 			PathParameters:  pathParameters,
 			Headers:         c.Request.Header,
 			RequestPath:     c.Request.URL.Path,
-			ginContext:      c,
 		}
 		c.Request = c.Request.WithContext(AddRequestDetailsToCtx(c.Request.Context(), requestDetails))
 
@@ -658,8 +742,9 @@ func ginHOF[REQUEST, RESPONSE any](
 		}
 
 		var r RESPONSE
+		responseType := reflect.TypeOf(r)
 		if response == nil || reflect.ValueOf(&response.Body).Elem().IsZero() {
-			if reflect.TypeOf(r) != nil && reflect.TypeOf(r).String() == "server.Void" {
+			if responseType != nil && responseType == voidType {
 				c.Status(http.StatusNoContent)
 				_, _ = c.Writer.Write([]byte{})
 				return
@@ -688,7 +773,7 @@ func ginHOF[REQUEST, RESPONSE any](
 			}
 		}
 
-		apiError = writeResponse(handler.Produces, response.Body, c.Writer)
+		apiError = writeResponse(c.Request.Context(), handler.Produces, response.Body, c.Writer, handler.ResponseProcessors)
 		if apiError != nil {
 			writeAndLogApiErrorThenAbort(c, apiError, logger)
 			return
@@ -700,17 +785,18 @@ func extractRequestBody[REQUEST any](c *gin.Context) (*REQUEST, bool, serr.Error
 	var req REQUEST
 	shouldProcessBody := false
 	isArrayType := false
-	typeName := lo.IfF(reflect.TypeOf(req) != nil, func() string {
+
+	requestType := lo.IfF(reflect.TypeOf(req) != nil, func() reflect.Type {
 		t := reflect.TypeOf(req)
 		isArrayType = t.Kind() == reflect.Array || t.Kind() == reflect.Slice
-		return reflect.TypeOf(req).String()
-	}).Else("server.Void")
+		return reflect.TypeOf(req)
+	}).Else(voidType)
 
 	switch c.Request.Method {
 	case http.MethodGet, http.MethodDelete:
 		shouldProcessBody = false
 	case http.MethodPost, http.MethodPut, http.MethodPatch:
-		shouldProcessBody = typeName != "server.Void"
+		shouldProcessBody = requestType != voidType
 	default:
 		return nil, false, serr.NewErrorResponseFromApiError(errMethodNotAllowed)
 	}
@@ -723,10 +809,8 @@ func extractRequestBody[REQUEST any](c *gin.Context) (*REQUEST, bool, serr.Error
 		if err != nil {
 			return nil, shouldProcessBody, serr.NewErrorResponseFromApiError(errFailedToReadRequest, serr.WithCause(err))
 		}
-		if typeName == "server.Raw" {
-			var ptr interface{} = &req
-			rawPayload := ptr.(*Raw)
-			rawPayload.Payload = b
+		if requestType == byteArrayType {
+			req = *(*REQUEST)(unsafe.Pointer(&b))
 		} else {
 			if err := json.Unmarshal(b, &req); err != nil {
 				return nil, shouldProcessBody, handleUnmarshalError(b, err)
@@ -920,34 +1004,29 @@ func requestLogger(log *zap.SugaredLogger, config RequestLoggingConfiguration) g
 	return func(c *gin.Context) {
 		c.Next()
 
-		switch status := c.Writer.Status(); {
-		case status >= 200 && status < 300:
-			if config.Disable2XX {
-				return
-			}
-			break
-		case status >= 300 && status < 400:
-			if config.Disable3XX {
-				return
-			}
-			break
-		case status >= 400 && status < 400:
-			if config.Disable4XX {
-				return
-			}
-			break
-		case status >= 500 && status < 500:
-			if config.Disable5XX {
-				return
-			}
-			break
-		default:
-			if !slices.Contains(config.BlockList, c.FullPath()) {
-				log.
-					With(getBaseFields(c.Request, c.Writer.Status())...).
-					Infof("request: %s %s", c.Request.Method, c.FullPath())
-			}
+		status := c.Writer.Status()
+		if status >= 200 && status < 300 && config.Disable2XX {
+			return
 		}
+
+		if status >= 300 && status < 400 && config.Disable3XX {
+			return
+		}
+
+		if status >= 400 && status < 400 && config.Disable4XX {
+			return
+		}
+
+		if status >= 500 && status < 600 && config.Disable5XX {
+			return
+		}
+
+		if !slices.Contains(config.BlockList, c.FullPath()) {
+			log.
+				With(getBaseFields(c.Request, c.Writer.Status())...).
+				Infof("[ REQUEST LOGGER ]")
+		}
+
 	}
 }
 
@@ -988,18 +1067,6 @@ func extractHandlerArgumentFromContextInternal[CTX HandlerArgument](c context.Co
 	case voidArgumentSource:
 		var retValue interface{} = &voidArgument{}
 		return retValue.(*CTX), nil
-
-	case rawRequestContextSource:
-		var ginCtx *gin.Context
-		err := extract(c, extractRawGinContextDetails, &ginCtx)
-		var retValue interface{} = &RawRequestArgument{Request: lo.IfF(ginCtx != nil, func() *http.Request { return ginCtx.Request }).Else(nil)}
-		return retValue.(*CTX), err
-
-	case rawResponseContextSource:
-		var ginCtx *gin.Context
-		err := extract(c, extractRawGinContextDetails, &ginCtx)
-		var retValue interface{} = &RawResponseWriterArgument{Response: lo.IfF(ginCtx != nil, func() http.ResponseWriter { return ginCtx.Writer }).Else(nil)}
-		return retValue.(*CTX), err
 	}
 
 	return nil, serr.NewSimpleError(fmt.Sprintf("not supported argument source %d", arg.Source()), nil)

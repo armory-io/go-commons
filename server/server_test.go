@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"github.com/armory-io/go-commons/iam"
 	"github.com/armory-io/go-commons/logging"
@@ -725,30 +727,25 @@ func (s *ServerTestSuite) TestGinHOF() {
 		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
 	})
 
-	s.T().Run("handler will work with raw request / response parameters", func(t *testing.T) {
+	s.T().Run("handler will work with []byte request / response parameters", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(recorder)
 		stubURL, _ := url.ParseRequestURI("https://example.com")
+
+		var buffer bytes.Buffer
+		err := binary.Write(&buffer, binary.BigEndian, []byte("hello world!"))
+		if err != nil {
+			t.Fatal("failed to marshal body", err)
+		}
 		c.Request = &http.Request{
 			Header: map[string][]string{},
 			Method: http.MethodPost,
 			URL:    stubURL,
-			Body:   io.NopCloser(strings.NewReader("{ \"text\": \"hello world\"}")),
+			Body:   io.NopCloser(bytes.NewReader(buffer.Bytes())),
 		}
-		handler := New2ArgHandler(func(ctx context.Context, _ Void, req RawRequestArgument, resp RawResponseWriterArgument) (*Response[Void], serr.Error) {
-			var input struct {
-				Text string `json:"text"`
-			}
-			err := json.NewDecoder(req.Request.Body).Decode(&input)
-			if err != nil {
-				return nil, serr.NewSimpleError("no read", err)
-			}
-			input.Text = "ECHO: " + input.Text
-			err = json.NewEncoder(resp.Response).Encode(input)
-			if err != nil {
-				return nil, serr.NewSimpleError("no write", err)
-			}
-			return SimpleResponse(Void{}), nil
+		handler := NewHandler(func(ctx context.Context, body []byte) (*Response[[]byte], serr.Error) {
+			result := reverse(body)
+			return SimpleResponse(result), nil
 		}, HandlerConfig{
 			Path:           "",
 			Method:         http.MethodPost,
@@ -757,11 +754,101 @@ func (s *ServerTestSuite) TestGinHOF() {
 
 		handlerFn := handler.GetGinHandlerFn(s.log, nil, &handlerDTO{
 			AuthOptOut: true,
+			Produces:   "text/plain",
 		})
 		handlerFn(c)
 		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
-		assert.Equal(t, "{\"text\":\"ECHO: hello world\"}\n", string(recorder.Body.Bytes()))
+		assert.Equal(t, "!dlrow olleh", string(recorder.Body.Bytes()))
 	})
+
+	s.T().Run("handler will work with response processor for text based handlers", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		stubURL, _ := url.ParseRequestURI("https://example.com")
+
+		var buffer bytes.Buffer
+		err := binary.Write(&buffer, binary.BigEndian, []byte("hello world!"))
+		if err != nil {
+			t.Fatal("failed to marshal body", err)
+		}
+		c.Request = &http.Request{
+			Header: map[string][]string{},
+			Method: http.MethodPost,
+			URL:    stubURL,
+			Body:   io.NopCloser(bytes.NewReader(buffer.Bytes())),
+		}
+		handler := NewHandler(func(ctx context.Context, body []byte) (*Response[[]byte], serr.Error) {
+			result := reverse(body)
+			return SimpleResponse(result), nil
+		}, HandlerConfig{
+			Path:           "",
+			Method:         http.MethodPost,
+			AuthZValidator: nil,
+		})
+
+		handlerFn := handler.GetGinHandlerFn(s.log, nil, &handlerDTO{
+			AuthOptOut: true,
+			Produces:   "text/plain",
+			ResponseProcessors: []ResponseProcessorFn{func(_ context.Context, body []byte) ([]byte, serr.Error) {
+				return reverse(body), nil
+			}},
+		})
+		handlerFn(c)
+		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
+		assert.Equal(t, "hello world!", string(recorder.Body.Bytes()))
+	})
+
+	s.T().Run("handler will work with response processor for JSON based handlers", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		stubURL, _ := url.ParseRequestURI("https://example.com")
+
+		c.Request = &http.Request{
+			Header: map[string][]string{},
+			Method: http.MethodPost,
+			URL:    stubURL,
+			Body:   io.NopCloser(strings.NewReader("{\"title\": \"Brave new world\"}")),
+		}
+		handler := NewHandler(func(ctx context.Context, body Book) (*Response[Book], serr.Error) {
+			body.Author = "Aldous Huxley"
+			return SimpleResponse(body), nil
+		}, HandlerConfig{
+			Path:           "",
+			Method:         http.MethodPost,
+			AuthZValidator: nil,
+		})
+
+		handlerFn := handler.GetGinHandlerFn(s.log, validator.New(), &handlerDTO{
+			AuthOptOut: true,
+			Produces:   "application/json",
+			ResponseProcessors: []ResponseProcessorFn{func(_ context.Context, body []byte) ([]byte, serr.Error) {
+				var book Book
+				_ = json.Unmarshal(body, &book)
+				book.Author = strings.ToUpper(book.Author)
+				book.Title = strings.ToUpper(book.Title)
+				body, _ = json.Marshal(book)
+				return body, nil
+			}},
+		})
+		handlerFn(c)
+		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
+		var book Book
+		_ = json.Unmarshal(recorder.Body.Bytes(), &book)
+		assert.Equal(t, "BRAVE NEW WORLD", book.Title)
+		assert.Equal(t, "ALDOUS HUXLEY", book.Author)
+	})
+}
+
+type Book struct {
+	Title  string `json:"title"`
+	Author string `json:"author"`
+}
+
+func reverse(input []byte) []byte {
+	if len(input) == 0 {
+		return input
+	}
+	return append(reverse(input[1:]), input[0])
 }
 
 type PathParameters struct {
