@@ -724,6 +724,44 @@ func (s *ServerTestSuite) TestGinHOF() {
 		handlerFn(c)
 		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
 	})
+
+	s.T().Run("handler will work with raw request / response parameters", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		stubURL, _ := url.ParseRequestURI("https://example.com")
+		c.Request = &http.Request{
+			Header: map[string][]string{},
+			Method: http.MethodPost,
+			URL:    stubURL,
+			Body:   io.NopCloser(strings.NewReader("{ \"text\": \"hello world\"}")),
+		}
+		handler := New2ArgHandler(func(ctx context.Context, _ Void, req RawRequestArgument, resp RawResponseWriterArgument) (*Response[Void], serr.Error) {
+			var input struct {
+				Text string `json:"text"`
+			}
+			err := json.NewDecoder(req.Request.Body).Decode(&input)
+			if err != nil {
+				return nil, serr.NewSimpleError("no read", err)
+			}
+			input.Text = "ECHO: " + input.Text
+			err = json.NewEncoder(resp.Response).Encode(input)
+			if err != nil {
+				return nil, serr.NewSimpleError("no write", err)
+			}
+			return SimpleResponse(Void{}), nil
+		}, HandlerConfig{
+			Path:           "",
+			Method:         http.MethodPost,
+			AuthZValidator: nil,
+		})
+
+		handlerFn := handler.GetGinHandlerFn(s.log, nil, &handlerDTO{
+			AuthOptOut: true,
+		})
+		handlerFn(c)
+		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
+		assert.Equal(t, "{\"text\":\"ECHO: hello world\"}\n", string(recorder.Body.Bytes()))
+	})
 }
 
 type PathParameters struct {

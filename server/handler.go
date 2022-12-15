@@ -23,6 +23,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/zap"
+	"net/http"
 )
 
 type (
@@ -98,6 +99,14 @@ type (
 		*iam.ArmoryCloudPrincipal
 	}
 
+	RawRequestArgument struct {
+		Request *http.Request
+	}
+
+	RawResponseWriterArgument struct {
+		Response http.ResponseWriter
+	}
+
 	voidArgument struct{}
 
 	ArgumentDataSource int
@@ -117,11 +126,13 @@ type (
 )
 
 const (
-	voidArgumentSource  ArgumentDataSource = -1
-	PathContextSource                      = 0
-	QueryContextSource                     = 1
-	HeaderContextSource                    = 2
-	AuthContextSource                      = 20
+	voidArgumentSource       ArgumentDataSource = -1
+	PathContextSource                           = 0
+	QueryContextSource                          = 1
+	HeaderContextSource                         = 2
+	AuthContextSource                           = 20
+	rawRequestContextSource                     = 21
+	rawResponseContextSource                    = 22
 )
 
 func (r *handler[REQUEST, RESPONSE]) Config() HandlerConfig {
@@ -141,6 +152,14 @@ func (ArmoryPrincipalArgument) Source() ArgumentDataSource {
 
 func (voidArgument) Source() ArgumentDataSource {
 	return voidArgumentSource
+}
+
+func (RawRequestArgument) Source() ArgumentDataSource {
+	return rawRequestContextSource
+}
+
+func (RawResponseWriterArgument) Source() ArgumentDataSource {
+	return rawResponseContextSource
 }
 
 // NewHandler creates a Handler from a handler function and server.HandlerConfig

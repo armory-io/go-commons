@@ -453,6 +453,8 @@ type RequestDetails struct {
 	PathParameters map[string]string
 	// RequestPath the string representing requested resources i.e. /api/v1/organizations/:orgID/...
 	RequestPath string
+	// ginContext not exposed to public, available for internal use cases when this context is required
+	ginContext *gin.Context
 }
 
 type requestDetailsKey struct{}
@@ -485,9 +487,10 @@ var (
 		HttpStatusCode: http.StatusInternalServerError,
 	}
 
-	extractPathDetails   = func(details *RequestDetails) any { return details.PathParameters }
-	extractQueryDetails  = func(details *RequestDetails) any { return details.QueryParameters }
-	extractHeaderDetails = func(details *RequestDetails) any { return details.Headers }
+	extractPathDetails          = func(details *RequestDetails) any { return details.PathParameters }
+	extractQueryDetails         = func(details *RequestDetails) any { return details.QueryParameters }
+	extractHeaderDetails        = func(details *RequestDetails) any { return details.Headers }
+	extractRawGinContextDetails = func(details *RequestDetails) any { return details.ginContext }
 )
 
 // ExtractRequestDetailsFromContext fetches the server.RequestDetails from the context
@@ -603,6 +606,7 @@ func ginHOF[REQUEST, RESPONSE any](
 			PathParameters:  pathParameters,
 			Headers:         c.Request.Header,
 			RequestPath:     c.Request.URL.Path,
+			ginContext:      c,
 		}
 		c.Request = c.Request.WithContext(AddRequestDetailsToCtx(c.Request.Context(), requestDetails))
 
@@ -984,6 +988,18 @@ func extractHandlerArgumentFromContextInternal[CTX HandlerArgument](c context.Co
 	case voidArgumentSource:
 		var retValue interface{} = &voidArgument{}
 		return retValue.(*CTX), nil
+
+	case rawRequestContextSource:
+		var ginCtx *gin.Context
+		err := extract(c, extractRawGinContextDetails, &ginCtx)
+		var retValue interface{} = &RawRequestArgument{Request: lo.IfF(ginCtx != nil, func() *http.Request { return ginCtx.Request }).Else(nil)}
+		return retValue.(*CTX), err
+
+	case rawResponseContextSource:
+		var ginCtx *gin.Context
+		err := extract(c, extractRawGinContextDetails, &ginCtx)
+		var retValue interface{} = &RawResponseWriterArgument{Response: lo.IfF(ginCtx != nil, func() http.ResponseWriter { return ginCtx.Writer }).Else(nil)}
+		return retValue.(*CTX), err
 	}
 
 	return nil, serr.NewSimpleError(fmt.Sprintf("not supported argument source %d", arg.Source()), nil)
