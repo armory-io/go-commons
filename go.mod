@@ -17,6 +17,7 @@ require (
 	github.com/go-playground/validator/v10 v10.11.0
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/golang-migrate/migrate/v4 v4.15.2
+	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.3.0
 	github.com/hashicorp/go-cleanhttp v0.5.2
 	github.com/hashicorp/go-retryablehttp v0.7.1
@@ -24,6 +25,7 @@ require (
 	github.com/hashicorp/vault/sdk v0.5.3
 	github.com/lestrrat-go/jwx v1.2.25
 	github.com/mitchellh/mapstructure v1.5.0
+	github.com/opentracing/opentracing-go v1.2.0
 	github.com/otiai10/copy v1.7.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.12.2
@@ -36,11 +38,14 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.36.1
 	go.opentelemetry.io/otel v1.10.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.3.0
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.3.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.3.0
 	go.opentelemetry.io/otel/sdk v1.10.0
 	go.opentelemetry.io/otel/trace v1.10.0
 	go.temporal.io/api v1.6.1-0.20211110205628-60c98e9cbfe2
 	go.temporal.io/sdk v1.13.1
+	go.temporal.io/sdk/contrib/opentelemetry v0.2.0
+	go.temporal.io/sdk/contrib/opentracing v0.2.0
 	go.temporal.io/sdk/contrib/tally v0.1.0
 	go.uber.org/fx v1.17.1
 	go.uber.org/multierr v1.8.0
@@ -93,7 +98,6 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/gogo/status v1.1.1 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/gnostic v0.5.7-v3refs // indirect
