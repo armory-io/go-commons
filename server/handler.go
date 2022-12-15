@@ -30,7 +30,7 @@ type (
 	// Instances of this interface should only ever be created by NewHandler, which happens automatically during server initialization
 	// The expected way that handlers are created is by creating a provider that provides an instance of Controller
 	Handler interface {
-		GetGinHandlerFn(log *zap.SugaredLogger, v *validator.Validate, handler *handlerDTO) gin.HandlerFunc
+		GetGinHandlerFn(log *zap.SugaredLogger, v *validator.Validate, handler *handlerDTO, processors []ResponseProcessor) gin.HandlerFunc
 		Config() HandlerConfig
 	}
 
@@ -70,8 +70,8 @@ func (r *handler[REQUEST, RESPONSE]) Config() HandlerConfig {
 	return r.config
 }
 
-func (r *handler[REQUEST, RESPONSE]) GetGinHandlerFn(log *zap.SugaredLogger, requestValidator *validator.Validate, config *handlerDTO) gin.HandlerFunc {
-	return ginHOF(r.handleFunc, config, requestValidator, log)
+func (r *handler[REQUEST, RESPONSE]) GetGinHandlerFn(log *zap.SugaredLogger, requestValidator *validator.Validate, config *handlerDTO, processors []ResponseProcessor) gin.HandlerFunc {
+	return ginHOF(r.handleFunc, config, requestValidator, log, processors)
 }
 
 // NewHandler creates a Handler from a handler function and server.HandlerConfig

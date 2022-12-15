@@ -59,6 +59,17 @@ type (
 		Prefix() string
 	}
 
+	ResponseProcessor func(ctx context.Context, bytes []byte) ([]byte, serr.Error)
+
+	ResponseProcessorWithOrder struct {
+		Order     int
+		Processor ResponseProcessor
+	}
+
+	IControllerPostResponseProcessor interface {
+		ResponseProcessors() []ResponseProcessorWithOrder
+	}
+
 	// IControllerAuthZValidator an IController can implement this interface to apply a common AuthZ validator to all exported handlers
 	IControllerAuthZValidator interface {
 		AuthZValidator(p *iam.ArmoryCloudPrincipal) (string, bool)
@@ -307,22 +318,43 @@ func configureServer(
 	return nil
 }
 
-func writeResponse(contentType string, body any, w gin.ResponseWriter) serr.Error {
+func writeResponse(ctx context.Context, contentType string, body any, w gin.ResponseWriter, processors []ResponseProcessor) serr.Error {
 	w.Header().Set("Content-Type", contentType)
 	switch contentType {
 	case "text/plain", "application/yaml":
-		return writeStringResponse(contentType, body, w)
+		return writeStringResponse(ctx, contentType, body, w, processors)
 	case "application/octet-stream":
 		return writeOctetStream(contentType, body, w)
 	default:
-		if err := json.NewEncoder(w).Encode(body); err != nil {
-			return serr.NewErrorResponseFromApiError(serr.APIError{
-				Message:        "Failed to write response",
-				HttpStatusCode: http.StatusInternalServerError,
-			}, serr.WithCause(err))
-		}
-		return nil
+		return writeJsonResponse(ctx, body, w, processors)
 	}
+}
+
+func writeJsonResponse(ctx context.Context, body any, w gin.ResponseWriter, processors []ResponseProcessor) serr.Error {
+	bytes, err := json.Marshal(body)
+	if err != nil {
+		return serr.NewErrorResponseFromApiError(serr.APIError{
+			Message:        "Failed to marshal response",
+			HttpStatusCode: http.StatusInternalServerError,
+		}, serr.WithCause(err))
+	}
+
+	for _, processor := range processors {
+		b, sErr := processor(ctx, bytes)
+		if sErr != nil {
+			return sErr
+		}
+		bytes = b
+	}
+
+	if _, err = w.Write(bytes); err != nil {
+		return serr.NewErrorResponseFromApiError(serr.APIError{
+			Message:        "Failed to write response",
+			HttpStatusCode: http.StatusInternalServerError,
+		}, serr.WithCause(err))
+	}
+
+	return nil
 }
 
 // writeOctetStream expects the body to be an io.ReadCloser, if it is, it will be copied to the response writer.
@@ -353,7 +385,7 @@ func writeOctetStream(contentType string, body any, w gin.ResponseWriter) serr.E
 	return nil
 }
 
-func writeStringResponse(contentType string, body any, w gin.ResponseWriter) serr.Error {
+func writeStringResponse(ctx context.Context, contentType string, body any, w gin.ResponseWriter, processors []ResponseProcessor) serr.Error {
 	t := reflect.TypeOf(body)
 	if t.Kind() != reflect.String {
 		return serr.NewErrorResponseFromApiError(serr.APIError{
@@ -367,7 +399,18 @@ func writeStringResponse(contentType string, body any, w gin.ResponseWriter) ser
 			}),
 		)
 	}
-	if _, err := w.Write([]byte(body.(string))); err != nil {
+
+	bytes := []byte(body.(string))
+
+	for _, processor := range processors {
+		b, sErr := processor(ctx, bytes)
+		if sErr != nil {
+			return sErr
+		}
+		bytes = b
+	}
+
+	if _, err := w.Write(bytes); err != nil {
 		return serr.NewErrorResponseFromApiError(serr.APIError{
 			Message:        "Failed to write response",
 			HttpStatusCode: http.StatusInternalServerError,
@@ -541,6 +584,7 @@ func ginHOF[REQUEST, RESPONSE any](
 	handler *handlerDTO,
 	requestValidator *validator.Validate,
 	logger *zap.SugaredLogger,
+	processors []ResponseProcessor,
 ) gin.HandlerFunc {
 	return func(c *gin.Context) {
 
@@ -637,7 +681,7 @@ func ginHOF[REQUEST, RESPONSE any](
 			}
 		}
 
-		apiError = writeResponse(handler.Produces, response.Body, c.Writer)
+		apiError = writeResponse(c.Request.Context(), handler.Produces, response.Body, c.Writer, processors)
 		if apiError != nil {
 			writeAndLogApiErrorThenAbort(c, apiError, logger)
 			return

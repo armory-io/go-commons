@@ -194,6 +194,22 @@ func newHandlerRegistry(name string, logger *zap.SugaredLogger, requestValidator
 					validators = append([]AuthZValidatorFn{c.AuthZValidator}, validators...)
 				}
 
+				var iResponseProcessors []ResponseProcessorWithOrder
+				if c, ok := c.(IControllerPostResponseProcessor); ok {
+					iResponseProcessors = c.ResponseProcessors()
+				}
+
+				// TODO sort array
+				sort.Slice(iResponseProcessors, func(i, j int) bool {
+					a := iResponseProcessors[i]
+					b := iResponseProcessors[j]
+					return a.Order < b.Order
+				})
+
+				processors := lo.Map(iResponseProcessors, func(processor ResponseProcessorWithOrder, _ int) ResponseProcessor {
+					return processor.Processor
+				})
+
 				if h.Config().Produces != "" {
 					hDTO.Produces = h.Config().Produces
 				} else {
@@ -232,7 +248,7 @@ func newHandlerRegistry(name string, logger *zap.SugaredLogger, requestValidator
 					return nil, fmt.Errorf("failed to register hander for [Path: %s, Method: %s, Produces: %s] there was already a registered handler", hDTO.Path, hDTO.Method, hDTO.Produces)
 				}
 
-				hDTO.HandlerFn = h.GetGinHandlerFn(logger, requestValidator, hDTO)
+				hDTO.HandlerFn = h.GetGinHandlerFn(logger, requestValidator, hDTO, processors)
 				registryData[key][hDTO.Produces] = hDTO
 			}
 		}
