@@ -68,7 +68,8 @@ func NewSvc(lc fx.Lifecycle, app metadata.ApplicationMetadata) MetricsSvc {
 		Separator:       tallyprom.DefaultSeparator,
 		SanitizeOptions: &sanitizeOptions,
 		Tags: map[string]string{
-			"appName":      app.Name,
+			"service.name": app.Name, // <- service.name is required to link custom metrics with otel trace and log data
+			"appName":      app.Name, // <- this duplicates service.name, but I don't want to break existing dashboards and alerts
 			"version":      app.Version,
 			"hostname":     app.Hostname,
 			"environment":  app.Environment,
