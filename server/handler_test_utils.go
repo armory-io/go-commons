@@ -1,6 +1,8 @@
 package server
 
 import (
+	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"github.com/armory-io/go-commons/iam"
@@ -141,6 +143,15 @@ func (h *HandlerTestContext) WithBody(t *testing.T, body interface{}) *HandlerTe
 	return h
 }
 
+func (h *HandlerTestContext) WithRawBody(t *testing.T, body any) *HandlerTestContext {
+	var buffer bytes.Buffer
+	err := binary.Write(&buffer, binary.BigEndian, body)
+	if err != nil {
+		t.Fatal("failed to marshal body", err)
+	}
+	h.body = io.NopCloser(bytes.NewReader(buffer.Bytes()))
+	return h
+}
 func (h *HandlerTestContext) BuildHandler(t *testing.T) (*gin.Context, gin.HandlerFunc, *httptest.ResponseRecorder) {
 
 	request := &http.Request{

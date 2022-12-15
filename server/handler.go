@@ -130,9 +130,9 @@ const (
 	PathContextSource                           = 0
 	QueryContextSource                          = 1
 	HeaderContextSource                         = 2
-	AuthContextSource                           = 20
-	rawRequestContextSource                     = 21
-	rawResponseContextSource                    = 22
+	authContextSource                           = 200
+	rawRequestContextSource                     = 201
+	rawResponseContextSource                    = 202
 )
 
 func (r *handler[REQUEST, RESPONSE]) Config() HandlerConfig {
@@ -147,7 +147,7 @@ func (r *handler[REQUEST, RESPONSE]) GetGinHandlerFn(log *zap.SugaredLogger, req
 }
 
 func (ArmoryPrincipalArgument) Source() ArgumentDataSource {
-	return AuthContextSource
+	return authContextSource
 }
 
 func (voidArgument) Source() ArgumentDataSource {

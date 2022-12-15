@@ -980,7 +980,7 @@ func extractHandlerArgumentFromContextInternal[CTX HandlerArgument](c context.Co
 		err := extract(c, extractHeaderDetails, &arg)
 		return &arg, err
 
-	case AuthContextSource:
+	case authContextSource:
 		principal, err := ExtractPrincipalFromContext(c)
 		var retValue interface{} = &ArmoryPrincipalArgument{principal}
 		return retValue.(*CTX), err
