@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	applicationName = "app"
+	applicationName = "service.name"
 	version         = "version"
 	environment     = "environment"
 	replicaSet      = "replicaset"
