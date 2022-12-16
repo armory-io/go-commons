@@ -17,11 +17,15 @@
 package server
 
 import (
+	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/fx"
 )
 
 var Module = fx.Options(
 	fx.Provide(validator.New),
-	fx.Invoke(ConfigureAndStartHttpServer),
+	fx.Provide(ConfigureAndStartHttpServer),
+	fx.Invoke(func(ginEngine *gin.Engine) {
+		// do nothing, this is a hack to ensure we provide/invoke the gin servers
+	}),
 )

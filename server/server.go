@@ -246,29 +246,32 @@ func ConfigureAndStartHttpServer(
 	md metadata.ApplicationMetadata,
 	requestValidator *validator.Validate,
 	is *info.InfoService,
-) error {
+) (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
+
+	var ginEngine *gin.Engine
+	var err error
 
 	if config.Management.Port == 0 {
 		var controllers []IController
 		controllers = append(controllers, serverControllers.Controllers...)
 		controllers = append(controllers, managementControllers.Controllers...)
-		err := configureServer("http", lc, config.HTTP, config.RequestLogging, config.SPA, as, logger, ms, md, is, true, requestValidator, controllers...)
+		ginEngine, err = configureServer("http", lc, config.HTTP, config.RequestLogging, config.SPA, as, logger, ms, md, is, true, requestValidator, controllers...)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return nil
+		return nil, err
 	}
 
-	err := configureServer("http", lc, config.HTTP, config.RequestLogging, config.SPA, as, logger, ms, md, is, false, requestValidator, serverControllers.Controllers...)
+	ginEngine, err = configureServer("http", lc, config.HTTP, config.RequestLogging, config.SPA, as, logger, ms, md, is, false, requestValidator, serverControllers.Controllers...)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	err = configureServer("management", lc, config.Management, config.RequestLogging, config.SPA, as, logger, ms, md, is, true, requestValidator, managementControllers.Controllers...)
+	_, err = configureServer("management", lc, config.Management, config.RequestLogging, config.SPA, as, logger, ms, md, is, true, requestValidator, managementControllers.Controllers...)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return ginEngine, nil
 }
 
 func configureServer(
@@ -285,7 +288,7 @@ func configureServer(
 	handlesManagement bool,
 	requestValidator *validator.Validate,
 	controllers ...IController,
-) error {
+) (*gin.Engine, error) {
 	g := gin.New()
 
 	// Dist Tracing
@@ -311,14 +314,14 @@ func configureServer(
 
 	handlerRegistry, err := newHandlerRegistry(name, logger, requestValidator, controllers)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if err = handlerRegistry.registerHandlers(registerHandlersInput{
 		AuthRequiredGroup:    authRequiredGroup,
 		AuthNotEnforcedGroup: authNotEnforcedGroup,
 	}); err != nil {
-		return err
+		return nil, err
 	}
 
 	// the prom handler has a bunch of logic that I don't want to have to port, so we will not make a controller for it.
@@ -347,7 +350,7 @@ func configureServer(
 
 	is.AddInfoContributor(handlerRegistry)
 
-	return nil
+	return g, nil
 }
 
 func writeResponse(ctx context.Context, contentType string, body any, w gin.ResponseWriter, processors []ResponseProcessorFn) serr.Error {
