@@ -18,18 +18,27 @@ package mysql
 
 import (
 	"database/sql"
+	"github.com/XSAM/otelsql"
+	"github.com/armory-io/go-commons/tracing"
 )
 
-func New(settings Configuration) (*sql.DB, error) {
-	var err error
+func New(settings Configuration, tracing tracing.Configuration) (*sql.DB, error) {
 	conn, err := settings.ConnectionUrl(false)
 	if err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("mysql", conn)
+
+	var db *sql.DB
+	if tracing.Push.Enabled {
+		db, err = otelsql.Open("mysql", conn, otelsql.WithSpanOptions(otelsql.SpanOptions{DisableErrSkip: true}))
+	} else {
+		db, err = sql.Open("mysql", conn)
+	}
+
 	if err != nil {
 		return nil, err
 	}
+
 	db.SetConnMaxLifetime(settings.MaxLifetime.Duration)
 	db.SetMaxOpenConns(settings.MaxOpenConnections)
 	db.SetMaxIdleConns(settings.MaxIdleConnections)

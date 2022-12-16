@@ -19,6 +19,7 @@ package tracing
 import (
 	"context"
 	"github.com/armory-io/go-commons/metadata"
+	"github.com/go-logr/zapr"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -34,6 +35,7 @@ type PushConfiguration struct {
 	Enabled  bool
 	Endpoint string
 	APIKey   string
+	Insecure bool
 }
 
 type Configuration struct {
@@ -66,13 +68,21 @@ func InitTracing(
 	}
 
 	if config.Push.Enabled {
-		logger.Info("Initializing OTEL tracing...")
-		client := otlptracehttp.NewClient(
+		logger.Info("Initializing tracing...")
+		options := []otlptracehttp.Option{
 			otlptracehttp.WithHeaders(map[string]string{
 				"api-key": config.Push.APIKey,
 			}),
 			otlptracehttp.WithEndpoint(config.Push.Endpoint),
 			otlptracehttp.WithURLPath("v1/traces"),
+		}
+
+		if config.Push.Insecure {
+			options = append(options, otlptracehttp.WithInsecure())
+		}
+
+		client := otlptracehttp.NewClient(
+			options...,
 		)
 
 		exporter, err := otlptrace.New(ctx, client)
@@ -83,7 +93,7 @@ func InitTracing(
 	}
 
 	tracerProvider := sdktrace.NewTracerProvider(tracingOpts...)
-
+	otel.SetLogger(zapr.NewLogger(logger.Desugar()))
 	otel.SetTracerProvider(tracerProvider)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
