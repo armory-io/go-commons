@@ -114,7 +114,8 @@ func (s *ServerTestSuite) TestGinHOF() {
 			URL:    stubURL,
 		}
 
-		c.Request = c.Request.WithContext(iam.DangerouslyWriteUnverifiedPrincipalToContext(c, &iam.ArmoryCloudPrincipal{
+		ctx := c.Request.Context()
+		c.Request = c.Request.WithContext(iam.DangerouslyWriteUnverifiedPrincipalToContext(ctx, &iam.ArmoryCloudPrincipal{
 			Name: "s.archer@p4o.io",
 		}))
 
@@ -556,7 +557,8 @@ func (s *ServerTestSuite) TestGinHOF() {
 			Method: http.MethodGet,
 			URL:    stubURL,
 		}
-		c.Request = c.Request.WithContext(iam.DangerouslyWriteUnverifiedPrincipalToContext(c, &iam.ArmoryCloudPrincipal{
+		ctx := c.Request.Context()
+		c.Request = c.Request.WithContext(iam.DangerouslyWriteUnverifiedPrincipalToContext(ctx, &iam.ArmoryCloudPrincipal{
 			Name: "happy@user.io",
 		}))
 		handler := New1ArgHandler(func(ctx context.Context, request Void, arg1 ArmoryPrincipalArgument) (*Response[string], serr.Error) {
@@ -587,7 +589,8 @@ func (s *ServerTestSuite) TestGinHOF() {
 			Method: http.MethodGet,
 			URL:    stubURL,
 		}
-		c.Request = c.Request.WithContext(iam.DangerouslyWriteUnverifiedPrincipalToContext(c, &iam.ArmoryCloudPrincipal{
+		ctx := c.Request.Context()
+		c.Request = c.Request.WithContext(iam.DangerouslyWriteUnverifiedPrincipalToContext(ctx, &iam.ArmoryCloudPrincipal{
 			Name: "happy@user.io",
 		}))
 		handler := New2ArgHandler(func(ctx context.Context, request Void, arg1 ArmoryPrincipalArgument, arg2 QueryParameters) (*Response[string], serr.Error) {
@@ -620,7 +623,8 @@ func (s *ServerTestSuite) TestGinHOF() {
 			Method: http.MethodGet,
 			URL:    stubURL,
 		}
-		c.Request = c.Request.WithContext(iam.DangerouslyWriteUnverifiedPrincipalToContext(c, &iam.ArmoryCloudPrincipal{
+		ctx := c.Request.Context()
+		c.Request = c.Request.WithContext(iam.DangerouslyWriteUnverifiedPrincipalToContext(ctx, &iam.ArmoryCloudPrincipal{
 			Name: "happy@user.io",
 		}))
 		c.Params = gin.Params{

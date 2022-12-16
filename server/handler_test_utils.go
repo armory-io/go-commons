@@ -168,7 +168,8 @@ func (h *HandlerTestContext) BuildHandler(t *testing.T) (*gin.Context, gin.Handl
 	}
 
 	if h.principal != nil {
-		h.ginContext.Request = h.ginContext.Request.WithContext(iam.DangerouslyWriteUnverifiedPrincipalToContext(h.ginContext, h.principal))
+		ctx := h.ginContext.Request.Context()
+		h.ginContext.Request = h.ginContext.Request.WithContext(iam.DangerouslyWriteUnverifiedPrincipalToContext(ctx, h.principal))
 	}
 
 	cfg, err := configureHandler(h.selectedHandler, h.controller, h.logger, h.validate)
