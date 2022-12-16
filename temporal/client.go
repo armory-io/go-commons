@@ -34,7 +34,8 @@ type Configuration struct {
 
 var Module = fx.Module(
 	"temporal",
-	fx.Provide(ArmoryTemporalProvider),
+	fx.Provide(ClientProvider),
+	fx.Provide(WorkerProviderProvider),
 )
 
 type ProviderParameters struct {
@@ -46,7 +47,7 @@ type ProviderParameters struct {
 	Tracing        tracing.Configuration `optional:"true"`
 }
 
-func ArmoryTemporalProvider(params ProviderParameters) (client.Client, error) {
+func ClientProvider(params ProviderParameters) (client.Client, error) {
 	adapted := NewZapAdapter(params.Logger.Desugar())
 	options, err := optionsFromParams(adapted, params)
 	if err != nil {
