@@ -533,7 +533,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 			URL:    stubURL,
 		}
 		handler := New1ArgHandler(func(ctx context.Context, request Void, arg1 HeaderParameters) (*Response[string], serr.Error) {
-			assert.Equal(t, "header-value", arg1.QueryParameter[0])
+			assert.Equal(t, "header-value", arg1.OrgIdParameter[0])
 			return SimpleResponse("ok"), nil
 
 		}, HandlerConfig{
@@ -661,7 +661,41 @@ func (s *ServerTestSuite) TestGinHOF() {
 		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
 	})
 
-	s.T().Run("parametrized handler will trigger 'beforeValidation' callback and populate request body with data from path parameters", func(t *testing.T) {
+	s.T().Run("handler with no extra params will trigger 'beforeValidation' callback and populate request body with data from path parameters", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		stubURL, _ := url.ParseRequestURI("https://example.com/")
+		c.Request = &http.Request{
+			Header: map[string][]string{},
+			Method: http.MethodPost,
+			URL:    stubURL,
+			Body:   io.NopCloser(strings.NewReader("{ \"Value\": \"body-content\"}")),
+		}
+
+		handler := NewHandler(func(ctx context.Context, request TestRequestBody) (*Response[string], serr.Error) {
+			assert.Equal(t, "BODY-CONTENT", request.Value)
+			assert.Equal(t, "1234567890", request.Key1)
+			assert.Equal(t, 1, *request.Key2)
+			return SimpleResponse("ok"), nil
+
+		}, HandlerConfig{
+			Path:           "/api",
+			Method:         http.MethodPost,
+			AuthZValidator: nil,
+		}).RegisterBeforeValidationHandler(func(body *TestRequestBody) {
+			body.Value = strings.ToUpper(body.Value)
+			body.Key1 = "1234567890"
+			body.Key2 = lo.ToPtr(1)
+		})
+
+		handlerFn := handler.GetGinHandlerFn(s.log, validator.New(), &handlerDTO{
+			AuthOptOut: true,
+		})
+		handlerFn(c)
+		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
+	})
+
+	s.T().Run("handler with 1 extra param will trigger 'beforeValidation' callback and populate request body with data from path parameters", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(recorder)
 		stubURL, _ := url.ParseRequestURI("https://example.com/")
@@ -695,6 +729,95 @@ func (s *ServerTestSuite) TestGinHOF() {
 		}).RegisterBeforeValidationHandler(func(body *TestRequestBody, arg1 *PathParameters) {
 			body.Key1 = arg1.Key1
 			body.Key2 = lo.ToPtr(arg1.Key2)
+		})
+
+		handlerFn := handler.GetGinHandlerFn(s.log, validator.New(), &handlerDTO{
+			AuthOptOut: true,
+		})
+		handlerFn(c)
+		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
+	})
+
+	s.T().Run("handler with 2 extra params will trigger 'beforeValidation' callback and populate request body with data from path parameters", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		stubURL, _ := url.ParseRequestURI("https://example.com/?keyA=!hello world!&keyB=2")
+		c.Request = &http.Request{
+			Header: map[string][]string{},
+			Method: http.MethodPost,
+			URL:    stubURL,
+			Body:   io.NopCloser(strings.NewReader("{ \"Value\": \"body-content\"}")),
+		}
+		c.Params = gin.Params{
+			gin.Param{
+				Key:   "key1",
+				Value: "-must-be-provided-",
+			},
+			gin.Param{
+				Key:   "key2",
+				Value: "1234",
+			},
+		}
+
+		handler := New2ArgHandler(func(ctx context.Context, request TestRequestBody, arg1 PathParameters, arg2 QueryParameters) (*Response[string], serr.Error) {
+			assert.Equal(t, "body-content", request.Value)
+			assert.Equal(t, 1234*2, *request.Key2)
+			assert.Equal(t, "-must-be-provided-!hello world!", request.Key1)
+			return SimpleResponse("ok"), nil
+
+		}, HandlerConfig{
+			Path:           "/api/key1/:key1/key2/:key2",
+			Method:         http.MethodGet,
+			AuthZValidator: nil,
+		}).RegisterBeforeValidationHandler(func(body *TestRequestBody, arg1 *PathParameters, arg2 *QueryParameters) {
+			body.Key1 = arg1.Key1 + arg2.KeyA[0]
+			body.Key2 = lo.ToPtr(arg1.Key2 * arg2.KeyB[0])
+		})
+
+		handlerFn := handler.GetGinHandlerFn(s.log, validator.New(), &handlerDTO{
+			AuthOptOut: true,
+		})
+		handlerFn(c)
+		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
+	})
+
+	s.T().Run("handler with 3 extra params will trigger 'beforeValidation' callback and populate request body with data from path parameters", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		stubURL, _ := url.ParseRequestURI("https://example.com/?keyA=!hello world!&keyB=2")
+		c.Request = &http.Request{
+			Header: map[string][]string{},
+			Method: http.MethodPost,
+			URL:    stubURL,
+			Body:   io.NopCloser(strings.NewReader("{ \"Value\": \"body-content\"}")),
+		}
+		c.Params = gin.Params{
+			gin.Param{
+				Key:   "key1",
+				Value: "-must-be-provided-",
+			},
+			gin.Param{
+				Key:   "key2",
+				Value: "1234",
+			},
+		}
+		c.Request = c.Request.WithContext(iam.DangerouslyWriteUnverifiedPrincipalToContext(c.Request.Context(), &iam.ArmoryCloudPrincipal{
+			Name: "test user",
+		}))
+
+		handler := New3ArgHandler(func(ctx context.Context, request TestRequestBody, arg1 PathParameters, arg2 QueryParameters, arg3 ArmoryPrincipalArgument) (*Response[string], serr.Error) {
+			assert.Equal(t, "body-content", request.Value)
+			assert.Equal(t, 1234*2, *request.Key2)
+			assert.Equal(t, "-must-be-provided-!hello world!test user", request.Key1)
+			return SimpleResponse("ok"), nil
+
+		}, HandlerConfig{
+			Path:           "/api/key1/:key1/key2/:key2",
+			Method:         http.MethodGet,
+			AuthZValidator: nil,
+		}).RegisterBeforeValidationHandler(func(body *TestRequestBody, arg1 *PathParameters, arg2 *QueryParameters, arg3 *ArmoryPrincipalArgument) {
+			body.Key1 = arg1.Key1 + arg2.KeyA[0] + arg3.Name
+			body.Key2 = lo.ToPtr(arg1.Key2 * arg2.KeyB[0])
 		})
 
 		handlerFn := handler.GetGinHandlerFn(s.log, validator.New(), &handlerDTO{
@@ -842,6 +965,54 @@ func (s *ServerTestSuite) TestGinHOF() {
 		assert.Equal(t, "BRAVE NEW WORLD", book.Title)
 		assert.Equal(t, "ALDOUS HUXLEY", book.Author)
 	})
+
+	s.T().Run("handler test utils make like a bit easier - part 1", func(t *testing.T) {
+		htc := NewHandlerTestContext(t, newDummyController().Controller, HandlerByLabel("simple"))
+		ctx, handler, resp := htc.
+			WithBody(t, TestRequestBody{}).
+			WithValidator(t, validator.New()).
+			WithHttpMethod(t, http.MethodPost).
+			WithPathParameters(t, "key1", "from path").
+			WithRequestHeaders(t, "x-org-id", "from header").
+			WithRequestUrl(t, "https://foo.bar?keyA=from query").
+			BuildHandler(t)
+
+		handler(ctx)
+
+		result, code := ExtractResponseDataAndCode[string](t, resp)
+
+		assert.Equal(t, http.StatusOK, code)
+		assert.Equal(t, "from query,from header,from path", *result)
+	})
+
+	s.T().Run("handler test utils make like a bit easier - part 2", func(t *testing.T) {
+		htc := NewHandlerTestContext(t, newDummyController().Controller, HandlerByLabel("passThrough"))
+		ctx, handler, resp := htc.
+			WithRawBody(t, []byte("hello")).
+			BuildHandler(t)
+
+		handler(ctx)
+
+		result, code := ExtractResponseDataAndCode[string](t, resp)
+
+		assert.Equal(t, http.StatusOK, code)
+		assert.Equal(t, "--hello--", *result)
+	})
+
+	s.T().Run("handler test utils make like a bit easier - part 3", func(t *testing.T) {
+		htc := NewHandlerTestContext(t, newDummyController().Controller, HandlerByLabel("passThroughWithPrincipal"))
+		ctx, handler, resp := htc.
+			WithJSONBody(t, "{\"prompt\": \"Welcome mister \"}").
+			WithPrincipal(t, &iam.ArmoryCloudPrincipal{Name: "Bond"}).
+			BuildHandler(t)
+
+		handler(ctx)
+
+		result, code := ExtractResponseDataAndCode[string](t, resp)
+
+		assert.Equal(t, http.StatusOK, code)
+		assert.Equal(t, "Welcome mister Bond", *result)
+	})
 }
 
 type Book struct {
@@ -875,7 +1046,7 @@ func (QueryParameters) Source() ArgumentDataSource {
 }
 
 type HeaderParameters struct {
-	QueryParameter []string `mapstructure:"x-org-id"`
+	OrgIdParameter []string `mapstructure:"x-org-id"`
 }
 
 func (HeaderParameters) Source() ArgumentDataSource {
@@ -920,4 +1091,53 @@ type TestRequestBody struct {
 	Value string `validate:"required"`
 	Key1  string `validate:"required,min=10"`
 	Key2  *int   `validate:"required"`
+}
+
+type dummyController struct {
+}
+
+func (*dummyController) SimpleOperation(c context.Context, body TestRequestBody, arg1 QueryParameters, arg2 HeaderParameters, arg3 PathParameters) (*Response[string], serr.Error) {
+	return SimpleResponse(body.Value), nil
+}
+func (*dummyController) StringPassThrough(c context.Context, body []byte) (*Response[string], serr.Error) {
+	return SimpleResponse("--" + string(body) + "--"), nil
+}
+
+func (*dummyController) StringPassThroughWithPrincipal(c context.Context, body struct{ Prompt string }, p ArmoryPrincipalArgument) (*Response[string], serr.Error) {
+	return SimpleResponse(body.Prompt + p.Name), nil
+}
+
+func (d *dummyController) Handlers() []Handler {
+	return []Handler{
+		New3ArgHandler(d.SimpleOperation, HandlerConfig{
+			Path:       "/foo/bar",
+			Method:     http.MethodPost,
+			AuthOptOut: true,
+			Label:      "simple",
+		}).RegisterBeforeValidationHandler(func(body *TestRequestBody, a1 *QueryParameters, a2 *HeaderParameters, a3 *PathParameters) {
+			body.Value = strings.Join([]string{a1.KeyA[0], a2.OrgIdParameter[0], a3.Key1}, ",")
+			body.Key1 = "filled in to pass the body validation later"
+			body.Key2 = lo.ToPtr(123)
+		}),
+
+		NewHandler(d.StringPassThrough, HandlerConfig{
+			Path:       "/foo/bar",
+			Method:     http.MethodPost,
+			AuthOptOut: true,
+			Label:      "passThrough",
+		}),
+
+		New1ArgHandler(d.StringPassThroughWithPrincipal, HandlerConfig{
+			Path:       "/foo/bar",
+			Method:     http.MethodPost,
+			AuthOptOut: true,
+			Label:      "passThroughWithPrincipal",
+		}),
+	}
+}
+
+func newDummyController() Controller {
+	return Controller{
+		Controller: &dummyController{},
+	}
 }

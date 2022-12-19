@@ -169,25 +169,9 @@ func newHandlerRegistry(name string, logger *zap.SugaredLogger, requestValidator
 	for _, collection := range controllerCollections {
 		for _, c := range collection {
 			for _, h := range c.Handlers() {
-				hDTO, err := configureHandler(h, c, logger, requestValidator)
-				if err != nil {
+				if err := configureHandler(h, c, logger, requestValidator, registryData); err != nil {
 					return nil, err
 				}
-
-				key := handlerDTOKey{
-					path:   hDTO.Path,
-					method: hDTO.Method,
-				}
-
-				if registryData[key] == nil {
-					registryData[key] = make(map[string]*handlerDTO)
-				}
-
-				if registryData[key][hDTO.Produces] != nil {
-					return nil, fmt.Errorf("failed to register hander for [Path: %s, Method: %s, Produces: %s] there was already a registered handler", hDTO.Path, hDTO.Method, hDTO.Produces)
-				}
-
-				registryData[key][hDTO.Produces] = hDTO
 			}
 		}
 	}
@@ -199,7 +183,7 @@ func newHandlerRegistry(name string, logger *zap.SugaredLogger, requestValidator
 	}, nil
 }
 
-func configureHandler(handler Handler, controller IController, logger *zap.SugaredLogger, requestValidator *validator.Validate) (*handlerDTO, error) {
+func configureHandler(handler Handler, controller IController, logger *zap.SugaredLogger, requestValidator *validator.Validate, registryData map[handlerDTOKey]map[string]*handlerDTO) error {
 	var validators []AuthZValidatorV2Fn
 	hDTO := &handlerDTO{
 		Path:            strings.TrimSuffix(strings.TrimSpace(handler.Config().Path), "/"),
@@ -276,7 +260,7 @@ func configureHandler(handler Handler, controller IController, logger *zap.Sugar
 
 	mt, err := contenttype.ParseMediaType(hDTO.Produces)
 	if err != nil {
-		return nil, multierr.Append(
+		return multierr.Append(
 			fmt.Errorf("failed to process mime type (%s) for handler with method: %s, path: %s", hDTO.Produces, hDTO.Method, hDTO.Path),
 			err,
 		)
@@ -289,5 +273,23 @@ func configureHandler(handler Handler, controller IController, logger *zap.Sugar
 
 	hDTO.HandlerFn = handler.GetGinHandlerFn(logger, requestValidator, hDTO)
 
-	return hDTO, nil
+	return registerHandler(hDTO, registryData)
+}
+
+func registerHandler(hDTO *handlerDTO, registryData map[handlerDTOKey]map[string]*handlerDTO) error {
+	key := handlerDTOKey{
+		path:   hDTO.Path,
+		method: hDTO.Method,
+	}
+
+	if registryData[key] == nil {
+		registryData[key] = make(map[string]*handlerDTO)
+	}
+
+	if registryData[key][hDTO.Produces] != nil {
+		return fmt.Errorf("failed to register hander for [Path: %s, Method: %s, Produces: %s] there was already a registered handler", hDTO.Path, hDTO.Method, hDTO.Produces)
+	}
+
+	registryData[key][hDTO.Produces] = hDTO
+	return nil
 }

@@ -666,73 +666,21 @@ func ginHOF[REQUEST, RESPONSE any](
 		// recover from panics and return a well-formed error and log the details
 		defer func() {
 			if r := recover(); r != nil {
-				cause := fmt.Sprintf("%s", r)
-				if cause == "" {
-					cause = "panic cause was nil"
-				}
-				writeAndLogApiErrorThenAbort(c, serr.NewErrorResponseFromApiError(
-					errInternalServerError,
-					serr.WithErrorMessage("The handler panicked"),
-					serr.WithStackTraceLoggingBehavior(serr.ForceStackTrace),
-					serr.WithFrameSkips(6),
-					serr.WithCause(fmt.Errorf(cause)),
-				), logger)
+				onRequestCompleted(c, logger, r)
 			}
 		}()
 
-		var pathParameters = make(map[string]string)
-		for _, p := range c.Params {
-			pathParameters[p.Key] = p.Value
-		}
+		onPrepareRequestContext(c)
 
-		// Stuff Request details into the context
-		requestDetails := RequestDetails{
-			QueryParameters: c.Request.URL.Query(),
-			PathParameters:  pathParameters,
-			Headers:         c.Request.Header,
-			RequestPath:     c.Request.URL.Path,
-		}
-		c.Request = c.Request.WithContext(AddRequestDetailsToCtx(c.Request.Context(), requestDetails))
-
-		if !handler.AuthOptOut {
-			if err := authorizeRequest(c.Request.Context(), handler); err != nil {
-				writeAndLogApiErrorThenAbort(c, err, logger)
-				return
-			}
-		}
-
-		req, shouldValidateBody, apiError := extractRequestBody[REQUEST](c)
-		if apiError != nil {
-			writeAndLogApiErrorThenAbort(c, apiError, logger)
+		if !onAuthorizeRequest(c, handler, logger) {
 			return
 		}
 
-		if nil == extractRequestArgsFn {
-			extractRequestArgsFn = extractArgsFromRequest1[REQUEST]
-		}
-
-		args, apiError := extractRequestArgsFn(c.Request.Context(), req)
-		if apiError != nil {
-			writeAndLogApiErrorThenAbort(c, apiError, logger)
+		var req *REQUEST
+		if r, ok := onExtractRequestBodyAndParameters(c, extractRequestArgsFn, logger, func(r *REQUEST) bool { return onValidateRequest(c, r, logger, requestValidator, extensions) }); !ok {
 			return
-		}
-		c.Request = c.Request.WithContext(addRequestArgumentsToCtx(c.Request.Context(), args))
-
-		if extensions.BeforeRequestValidate != nil {
-			extensions.BeforeRequestValidate(c.Request.Context())
-		}
-
-		if shouldValidateBody {
-			apiError = validateRequestBody(req, requestValidator)
-			if nil != apiError {
-				writeAndLogApiErrorThenAbort(c, apiError, logger)
-				return
-			}
-
-			if err := defaults.Set(req); err != nil {
-				apiError = serr.NewErrorResponseFromApiError(errFailedToSetRequestDefaults, serr.WithCause(err))
-				writeAndLogApiErrorThenAbort(c, apiError, logger)
-			}
+		} else {
+			req = r
 		}
 
 		response, apiError := handlerFn(c.Request.Context(), *req)
@@ -741,44 +689,140 @@ func ginHOF[REQUEST, RESPONSE any](
 			return
 		}
 
-		var r RESPONSE
-		responseType := reflect.TypeOf(r)
-		if response == nil || reflect.ValueOf(&response.Body).Elem().IsZero() {
-			if responseType != nil && responseType == voidType {
-				c.Status(http.StatusNoContent)
-				_, _ = c.Writer.Write([]byte{})
-				return
-			} else {
-				writeAndLogApiErrorThenAbort(c, serr.NewErrorResponseFromApiError(
-					errServerFailedToProduceExpectedResponse,
-					serr.WithErrorMessage("The handler returned a nil response or nil response.Body but the response type was not server.Void, your handler should return *server.Response[server.Void] if you want to have no response body, else you must return a non nil response object."),
-					serr.WithStackTraceLoggingBehavior(serr.ForceNoStackTrace),
-				), logger)
-				return
-			}
-		}
+		onHandleResponse(c, response, logger, handler, apiError)
+	}
+}
 
-		statusCode := http.StatusOK
-		if handler.StatusCode != 0 {
-			statusCode = handler.StatusCode
-		}
-		if response.StatusCode != 0 {
-			statusCode = response.StatusCode
-		}
-		c.Status(statusCode)
-
-		for header, values := range response.Headers {
-			for _, value := range values {
-				c.Header(header, value)
-			}
-		}
-
-		apiError = writeResponse(c.Request.Context(), handler.Produces, response.Body, c.Writer, handler.ResponseProcessors)
-		if apiError != nil {
-			writeAndLogApiErrorThenAbort(c, apiError, logger)
+func onHandleResponse[RESPONSE any](c *gin.Context, response *Response[RESPONSE], logger *zap.SugaredLogger, handler *handlerDTO, apiError serr.Error) {
+	var r RESPONSE
+	responseType := reflect.TypeOf(r)
+	if response == nil || reflect.ValueOf(&response.Body).Elem().IsZero() {
+		if responseType != nil && responseType == voidType {
+			c.Status(http.StatusNoContent)
+			_, _ = c.Writer.Write([]byte{})
+			return
+		} else {
+			writeAndLogApiErrorThenAbort(c, serr.NewErrorResponseFromApiError(
+				errServerFailedToProduceExpectedResponse,
+				serr.WithErrorMessage("The handler returned a nil response or nil response.Body but the response type was not server.Void, your handler should return *server.Response[server.Void] if you want to have no response body, else you must return a non nil response object."),
+				serr.WithStackTraceLoggingBehavior(serr.ForceNoStackTrace),
+			), logger)
 			return
 		}
 	}
+
+	statusCode := http.StatusOK
+	if handler.StatusCode != 0 {
+		statusCode = handler.StatusCode
+	}
+	if response.StatusCode != 0 {
+		statusCode = response.StatusCode
+	}
+	c.Status(statusCode)
+
+	for header, values := range response.Headers {
+		for _, value := range values {
+			c.Header(header, value)
+		}
+	}
+
+	apiError = writeResponse(c.Request.Context(), handler.Produces, response.Body, c.Writer, handler.ResponseProcessors)
+	if apiError != nil {
+		writeAndLogApiErrorThenAbort(c, apiError, logger)
+		return
+	}
+}
+
+func onRequestCompleted(c *gin.Context, logger *zap.SugaredLogger, panicReason any) {
+	cause := fmt.Sprintf("%s", panicReason)
+	if cause == "" {
+		cause = "panic cause was nil"
+	}
+	writeAndLogApiErrorThenAbort(c, serr.NewErrorResponseFromApiError(
+		errInternalServerError,
+		serr.WithErrorMessage("The handler panicked"),
+		serr.WithStackTraceLoggingBehavior(serr.ForceStackTrace),
+		serr.WithFrameSkips(6),
+		serr.WithCause(fmt.Errorf(cause)),
+	), logger)
+}
+
+func onPrepareRequestContext(c *gin.Context) {
+	// Stuff Request details into the context
+	requestDetails := RequestDetails{
+		QueryParameters: c.Request.URL.Query(),
+		PathParameters:  extractPathParameters(c),
+		Headers:         c.Request.Header,
+		RequestPath:     c.Request.URL.Path,
+	}
+	c.Request = c.Request.WithContext(AddRequestDetailsToCtx(c.Request.Context(), requestDetails))
+}
+
+func onAuthorizeRequest(c *gin.Context, handler *handlerDTO, logger *zap.SugaredLogger) bool {
+	if !handler.AuthOptOut {
+		if err := authorizeRequest(c.Request.Context(), handler); err != nil {
+			writeAndLogApiErrorThenAbort(c, err, logger)
+			return false
+		}
+	}
+	return true
+}
+
+func onExtractRequestBodyAndParameters[REQUEST any](
+	c *gin.Context,
+	extractRequestArgsFn extractRequestArgumentsDelegate[REQUEST],
+	logger *zap.SugaredLogger,
+	validateHandler func(req *REQUEST) bool) (*REQUEST, bool) {
+	req, shouldValidateBody, apiError := extractRequestBody[REQUEST](c)
+	if apiError != nil {
+		writeAndLogApiErrorThenAbort(c, apiError, logger)
+		return nil, false
+	}
+
+	if nil == extractRequestArgsFn {
+		extractRequestArgsFn = extractArgsFromRequest1[REQUEST]
+	}
+
+	args, apiError := extractRequestArgsFn(c.Request.Context(), req)
+	if apiError != nil {
+		writeAndLogApiErrorThenAbort(c, apiError, logger)
+		return nil, false
+	}
+	c.Request = c.Request.WithContext(addRequestArgumentsToCtx(c.Request.Context(), args))
+
+	if shouldValidateBody {
+		return req, validateHandler(req)
+	}
+
+	return req, true
+}
+
+func onValidateRequest[REQUEST any](c *gin.Context, req *REQUEST, logger *zap.SugaredLogger, requestValidator *validator.Validate, extensions *HandlerExtensionPoints) bool {
+	if extensions.BeforeRequestValidate != nil {
+		extensions.BeforeRequestValidate(c.Request.Context())
+	}
+
+	apiError := validateRequestBody(req, requestValidator)
+	if nil != apiError {
+		writeAndLogApiErrorThenAbort(c, apiError, logger)
+		return false
+	}
+
+	if err := defaults.Set(req); err != nil {
+		apiError = serr.NewErrorResponseFromApiError(errFailedToSetRequestDefaults, serr.WithCause(err))
+		writeAndLogApiErrorThenAbort(c, apiError, logger)
+		return false
+	}
+
+	return true
+}
+
+func extractPathParameters(c *gin.Context) map[string]string {
+	var pathParameters = make(map[string]string)
+	for _, p := range c.Params {
+		pathParameters[p.Key] = p.Value
+	}
+	return pathParameters
 }
 
 func extractRequestBody[REQUEST any](c *gin.Context) (*REQUEST, bool, serr.Error) {

@@ -172,9 +172,17 @@ func (h *HandlerTestContext) BuildHandler(t *testing.T) (*gin.Context, gin.Handl
 		h.ginContext.Request = h.ginContext.Request.WithContext(iam.DangerouslyWriteUnverifiedPrincipalToContext(ctx, h.principal))
 	}
 
-	cfg, err := configureHandler(h.selectedHandler, h.controller, h.logger, h.validate)
+	registryData := make(map[handlerDTOKey]map[string]*handlerDTO)
+	err := configureHandler(h.selectedHandler, h.controller, h.logger, h.validate, registryData)
 	if err != nil {
 		t.Fatal("failed to create handler configuration", err)
+	}
+
+	var cfg *handlerDTO
+	for _, v := range registryData {
+		for _, e := range v {
+			cfg = e
+		}
 	}
 
 	return h.ginContext, h.selectedHandler.GetGinHandlerFn(h.logger, h.validate, cfg), h.recorder
