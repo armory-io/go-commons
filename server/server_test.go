@@ -467,18 +467,18 @@ func (s *ServerTestSuite) TestGinHOF() {
 		}
 		c.Params = gin.Params{
 			gin.Param{
-				Key:   "key1",
+				Key:   "resourceId",
 				Value: "hello world",
 			},
 			gin.Param{
-				Key:   "key2",
+				Key:   "subResourceId",
 				Value: "1234",
 			},
 		}
 
 		handler := New1ArgHandler(func(ctx context.Context, request Void, arg1 PathParameters) (*Response[string], serr.Error) {
-			assert.Equal(t, "hello world", arg1.Key1)
-			assert.Equal(t, 1234, arg1.Key2)
+			assert.Equal(t, "hello world", arg1.ResourceID)
+			assert.Equal(t, 1234, arg1.SubResourceID)
 			return SimpleResponse("ok"), nil
 
 		}, HandlerConfig{
@@ -497,15 +497,15 @@ func (s *ServerTestSuite) TestGinHOF() {
 	s.T().Run("parametrized handler will get context parameters from query", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(recorder)
-		stubURL, _ := url.ParseRequestURI("https://example.com?keyA=world&keyB=4321")
+		stubURL, _ := url.ParseRequestURI("https://example.com?QueryComponent=world&QuerySubComponent=4321")
 		c.Request = &http.Request{
 			Header: map[string][]string{},
 			Method: http.MethodGet,
 			URL:    stubURL,
 		}
 		handler := New1ArgHandler(func(ctx context.Context, request Void, arg1 QueryParameters) (*Response[string], serr.Error) {
-			assert.Equal(t, "world", arg1.KeyA[0])
-			assert.Equal(t, 4321, arg1.KeyB[0])
+			assert.Equal(t, "world", arg1.QueryComponent[0])
+			assert.Equal(t, 4321, arg1.QuerySubComponent[0])
 			return SimpleResponse("ok"), nil
 
 		}, HandlerConfig{
@@ -584,7 +584,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 	s.T().Run("parametrized handler with 2 args works", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(recorder)
-		stubURL, _ := url.ParseRequestURI("https://example.com?keyA=world&keyB=4321")
+		stubURL, _ := url.ParseRequestURI("https://example.com?QueryComponent=world&QuerySubComponent=4321")
 		c.Request = &http.Request{
 			Header: map[string][]string{},
 			Method: http.MethodGet,
@@ -596,8 +596,8 @@ func (s *ServerTestSuite) TestGinHOF() {
 		}))
 		handler := New2ArgHandler(func(ctx context.Context, request Void, arg1 ArmoryPrincipalArgument, arg2 QueryParameters) (*Response[string], serr.Error) {
 			assert.Equal(t, "happy@user.io", arg1.Name)
-			assert.Equal(t, arg2.KeyA[0], "world")
-			assert.Equal(t, arg2.KeyB[0], 4321)
+			assert.Equal(t, arg2.QueryComponent[0], "world")
+			assert.Equal(t, arg2.QuerySubComponent[0], 4321)
 			return SimpleResponse("ok"), nil
 
 		}, HandlerConfig{
@@ -618,7 +618,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 	s.T().Run("parametrized handler with 3 args works", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(recorder)
-		stubURL, _ := url.ParseRequestURI("https://example.com?keyA=world&keyB=4321")
+		stubURL, _ := url.ParseRequestURI("https://example.com?QueryComponent=world&QuerySubComponent=4321")
 		c.Request = &http.Request{
 			Header: map[string][]string{},
 			Method: http.MethodGet,
@@ -630,20 +630,20 @@ func (s *ServerTestSuite) TestGinHOF() {
 		}))
 		c.Params = gin.Params{
 			gin.Param{
-				Key:   "key1",
+				Key:   "resourceId",
 				Value: "hello world",
 			},
 			gin.Param{
-				Key:   "key2",
+				Key:   "subResourceId",
 				Value: "1234",
 			},
 		}
 		handler := New3ArgHandler(func(ctx context.Context, request Void, arg1 ArmoryPrincipalArgument, arg2 QueryParameters, arg3 PathParameters) (*Response[string], serr.Error) {
 			assert.Equal(t, "happy@user.io", arg1.Name)
-			assert.Equal(t, arg2.KeyA[0], "world")
-			assert.Equal(t, arg2.KeyB[0], 4321)
-			assert.Equal(t, arg3.Key1, "hello world")
-			assert.Equal(t, arg3.Key2, 1234)
+			assert.Equal(t, arg2.QueryComponent[0], "world")
+			assert.Equal(t, arg2.QuerySubComponent[0], 4321)
+			assert.Equal(t, arg3.ResourceID, "hello world")
+			assert.Equal(t, arg3.SubResourceID, 1234)
 			return SimpleResponse("ok"), nil
 
 		}, HandlerConfig{
@@ -707,11 +707,11 @@ func (s *ServerTestSuite) TestGinHOF() {
 		}
 		c.Params = gin.Params{
 			gin.Param{
-				Key:   "key1",
+				Key:   "resourceId",
 				Value: "-must-be-provided-",
 			},
 			gin.Param{
-				Key:   "key2",
+				Key:   "subresourceId",
 				Value: "1234",
 			},
 		}
@@ -727,8 +727,8 @@ func (s *ServerTestSuite) TestGinHOF() {
 			Method:         http.MethodGet,
 			AuthZValidator: nil,
 		}).RegisterBeforeValidationHandler(func(body *TestRequestBody, arg1 *PathParameters) {
-			body.Key1 = arg1.Key1
-			body.Key2 = lo.ToPtr(arg1.Key2)
+			body.Key1 = arg1.ResourceID
+			body.Key2 = lo.ToPtr(arg1.SubResourceID)
 		})
 
 		handlerFn := handler.GetGinHandlerFn(s.log, validator.New(), &handlerDTO{
@@ -741,7 +741,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 	s.T().Run("handler with 2 extra params will trigger 'beforeValidation' callback and populate request body with data from path parameters", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(recorder)
-		stubURL, _ := url.ParseRequestURI("https://example.com/?keyA=!hello world!&keyB=2")
+		stubURL, _ := url.ParseRequestURI("https://example.com/?QueryComponent=!hello world!&QuerySubComponent=2")
 		c.Request = &http.Request{
 			Header: map[string][]string{},
 			Method: http.MethodPost,
@@ -750,11 +750,11 @@ func (s *ServerTestSuite) TestGinHOF() {
 		}
 		c.Params = gin.Params{
 			gin.Param{
-				Key:   "key1",
+				Key:   "resourceId",
 				Value: "-must-be-provided-",
 			},
 			gin.Param{
-				Key:   "key2",
+				Key:   "subResourceId",
 				Value: "1234",
 			},
 		}
@@ -770,8 +770,8 @@ func (s *ServerTestSuite) TestGinHOF() {
 			Method:         http.MethodGet,
 			AuthZValidator: nil,
 		}).RegisterBeforeValidationHandler(func(body *TestRequestBody, arg1 *PathParameters, arg2 *QueryParameters) {
-			body.Key1 = arg1.Key1 + arg2.KeyA[0]
-			body.Key2 = lo.ToPtr(arg1.Key2 * arg2.KeyB[0])
+			body.Key1 = arg1.ResourceID + arg2.QueryComponent[0]
+			body.Key2 = lo.ToPtr(arg1.SubResourceID * arg2.QuerySubComponent[0])
 		})
 
 		handlerFn := handler.GetGinHandlerFn(s.log, validator.New(), &handlerDTO{
@@ -784,7 +784,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 	s.T().Run("handler with 3 extra params will trigger 'beforeValidation' callback and populate request body with data from path parameters", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(recorder)
-		stubURL, _ := url.ParseRequestURI("https://example.com/?keyA=!hello world!&keyB=2")
+		stubURL, _ := url.ParseRequestURI("https://example.com/?QueryComponent=!hello world!&QuerySubComponent=2")
 		c.Request = &http.Request{
 			Header: map[string][]string{},
 			Method: http.MethodPost,
@@ -793,11 +793,11 @@ func (s *ServerTestSuite) TestGinHOF() {
 		}
 		c.Params = gin.Params{
 			gin.Param{
-				Key:   "key1",
+				Key:   "resourceId",
 				Value: "-must-be-provided-",
 			},
 			gin.Param{
-				Key:   "key2",
+				Key:   "subResourceId",
 				Value: "1234",
 			},
 		}
@@ -816,8 +816,8 @@ func (s *ServerTestSuite) TestGinHOF() {
 			Method:         http.MethodGet,
 			AuthZValidator: nil,
 		}).RegisterBeforeValidationHandler(func(body *TestRequestBody, arg1 *PathParameters, arg2 *QueryParameters, arg3 *ArmoryPrincipalArgument) {
-			body.Key1 = arg1.Key1 + arg2.KeyA[0] + arg3.Name
-			body.Key2 = lo.ToPtr(arg1.Key2 * arg2.KeyB[0])
+			body.Key1 = arg1.ResourceID + arg2.QueryComponent[0] + arg3.Name
+			body.Key2 = lo.ToPtr(arg1.SubResourceID * arg2.QuerySubComponent[0])
 		})
 
 		handlerFn := handler.GetGinHandlerFn(s.log, validator.New(), &handlerDTO{
@@ -972,9 +972,9 @@ func (s *ServerTestSuite) TestGinHOF() {
 			WithBody(t, TestRequestBody{}).
 			WithValidator(t, validator.New()).
 			WithHttpMethod(t, http.MethodPost).
-			WithPathParameters(t, "key1", "from path").
+			WithPathParameters(t, "resourceId", "from path").
 			WithRequestHeaders(t, "x-org-id", "from header").
-			WithRequestUrl(t, "https://foo.bar?keyA=from query").
+			WithRequestUrl(t, "https://foo.bar?QueryComponent=from query").
 			BuildHandler(t)
 
 		handler(ctx)
@@ -983,6 +983,22 @@ func (s *ServerTestSuite) TestGinHOF() {
 
 		assert.Equal(t, http.StatusOK, code)
 		assert.Equal(t, "from query,from header,from path", *result)
+	})
+
+	s.T().Run("request arguments required by the controller are validated before executing method", func(t *testing.T) {
+		htc := NewHandlerTestContext(t, newDummyController().Controller, HandlerByLabel("simple"))
+		ctx, handler, resp := htc.
+			WithBody(t, TestRequestBody{}).
+			WithValidator(t, validator.New()).
+			WithHttpMethod(t, http.MethodPost).
+			WithPathParameters(t, "resourceId", "from path").
+			WithRequestHeaders(t, "x-org-id", ""). // empty header - will fail validation on HeaderParameters struct
+			WithRequestUrl(t, "https://foo.bar?QueryComponent=from query").
+			BuildHandler(t)
+
+		handler(ctx)
+
+		assert.Equal(t, http.StatusBadRequest, resp.Code)
 	})
 
 	s.T().Run("handler test utils make like a bit easier - part 2", func(t *testing.T) {
@@ -1027,30 +1043,42 @@ func reverse(input []byte) []byte {
 	return append(reverse(input[1:]), input[0])
 }
 
+// PathParameters struct to be loaded from path parameters - i.e. http://localhost/api/resource/:resourceId/subresource/:subResourceId
 type PathParameters struct {
-	Key1 string
-	Key2 int
+	ResourceID    string
+	SubResourceID int
 }
 
+// Source - tells the handler where to look for the values to fill in the corresponding parameters structure - in this case - it is going to be path parameters
 func (PathParameters) Source() ArgumentDataSource {
 	return PathContextSource
 }
 
+// QueryParameters - struct to be loaded from Query parameters - by definition - it can be an array, so in order to bind it - you need to wrap it in an array.
+// For simplicity - feel free to implement methods which do return specific entry from the array or combined value
 type QueryParameters struct {
-	KeyA []string
-	KeyB []int
+	QueryComponent    []string
+	QuerySubComponent []int
 }
 
+// Source - tells the handler where to look for the values to fill in the corresponding parameters structure - in this case - it is going to be query parameters
 func (QueryParameters) Source() ArgumentDataSource {
 	return QueryContextSource
 }
 
+// HeaderParameters - struct to be loaded from provided headers - by definition - it is an array.
 type HeaderParameters struct {
 	OrgIdParameter []string `mapstructure:"x-org-id"`
 }
 
+// Source - tells the handler where to look for the values to fill in the corresponding parameters structure - in this case - it is going to be query parameters
 func (HeaderParameters) Source() ArgumentDataSource {
 	return HeaderContextSource
+}
+
+// Check - optional interface, if implemented - the handler will check if the provided data satisfies your expectations - if not - 400 BadRequest status code would be returned
+func (h HeaderParameters) Check() bool {
+	return len(h.OrgIdParameter) == 1 && h.OrgIdParameter[0] != ""
 }
 
 type Widget struct {
@@ -1110,12 +1138,12 @@ func (*dummyController) StringPassThroughWithPrincipal(c context.Context, body s
 func (d *dummyController) Handlers() []Handler {
 	return []Handler{
 		New3ArgHandler(d.SimpleOperation, HandlerConfig{
-			Path:       "/foo/bar",
+			Path:       "/foo/bar/:key1/fffff/:key2",
 			Method:     http.MethodPost,
 			AuthOptOut: true,
 			Label:      "simple",
 		}).RegisterBeforeValidationHandler(func(body *TestRequestBody, a1 *QueryParameters, a2 *HeaderParameters, a3 *PathParameters) {
-			body.Value = strings.Join([]string{a1.KeyA[0], a2.OrgIdParameter[0], a3.Key1}, ",")
+			body.Value = strings.Join([]string{a1.QueryComponent[0], a2.OrgIdParameter[0], a3.ResourceID}, ",")
 			body.Key1 = "filled in to pass the body validation later"
 			body.Key2 = lo.ToPtr(123)
 		}),

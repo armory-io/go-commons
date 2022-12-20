@@ -59,13 +59,17 @@ type (
 		Prefix() string
 	}
 
+	// ResponseProcessorFn function, executed after the handler processing is complete. It provides user a chance to get raw response bytes and allow
+	// extra processing of the response before sending it back to the caller
 	ResponseProcessorFn func(ctx context.Context, bytes []byte) ([]byte, serr.Error)
 
+	// ResponseProcessorWithOrder structure wrapping response processors - if one wants to chain multiple processors, provide proper order to build the correct pipeline
 	ResponseProcessorWithOrder struct {
 		Order     int
 		Processor ResponseProcessorFn
 	}
 
+	// IControllerPostResponseProcessor the IController can implement this interface to provide reponse processor to all exported handlers
 	IControllerPostResponseProcessor interface {
 		ResponseProcessors() []ResponseProcessorWithOrder
 	}
@@ -185,6 +189,12 @@ type (
 		Body       T
 	}
 
+	// requestArgs - structure which:
+	// - always contains request's body provided as Request (of type *T). Will be of Void type for GET and DELETE request, can be Void for other types in case when no request body is required
+	// - optional Arg1 of whatever type you provide, otherwise - it is of voidArgument type
+	// - optional Arg2 of whatever type you provide, otherwise - it is of voidArgument type
+	// - optional Arg3 of whatever type you provide, otherwise - it is of voidArgument type
+	// Note: HandlerArgument is an interface, which defines where to pull the data for the argument from (typical is Path, Query or Header, but there are some special cases - like ArmoryCloudPrincipal)
 	requestArgs[T any, A1 HandlerArgument, A2 HandlerArgument, A3 HandlerArgument] struct {
 		Request *T
 		Arg1    *A1
@@ -548,13 +558,6 @@ type requestDetailsKey struct{}
 // AddRequestDetailsToCtx is exposed for testing and allows tests to configure the request details when testing handler functions
 func AddRequestDetailsToCtx(ctx context.Context, details RequestDetails) context.Context {
 	return context.WithValue(ctx, requestDetailsKey{}, details)
-}
-
-// requestArguments - strongly typed, extracted payload from the request - depending on the handler method will
-// contain request, extracted path parameters, query parameters, principal parameter; to be used as server handler's
-// input arguments
-type requestArguments struct {
-	arguments interface{}
 }
 
 type requestArgumentsKey struct{}
