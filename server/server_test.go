@@ -487,7 +487,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 			AuthZValidator: nil,
 		})
 
-		handlerFn := handler.GetGinHandlerFn(s.log, nil, &handlerDTO{
+		handlerFn := handler.GetGinHandlerFn(s.log, validator.New(), &handlerDTO{
 			AuthOptOut: true,
 		})
 		handlerFn(c)
@@ -514,7 +514,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 			AuthZValidator: nil,
 		})
 
-		handlerFn := handler.GetGinHandlerFn(s.log, nil, &handlerDTO{
+		handlerFn := handler.GetGinHandlerFn(s.log, validator.New(), &handlerDTO{
 			AuthOptOut: true,
 		})
 		handlerFn(c)
@@ -542,7 +542,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 			AuthZValidator: nil,
 		})
 
-		handlerFn := handler.GetGinHandlerFn(s.log, nil, &handlerDTO{
+		handlerFn := handler.GetGinHandlerFn(s.log, validator.New(), &handlerDTO{
 			AuthOptOut: true,
 		})
 		handlerFn(c)
@@ -574,7 +574,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 			},
 		})
 
-		handlerFn := handler.GetGinHandlerFn(s.log, nil, &handlerDTO{
+		handlerFn := handler.GetGinHandlerFn(s.log, validator.New(), &handlerDTO{
 			AuthOptOut: false,
 		})
 		handlerFn(c)
@@ -608,7 +608,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 			},
 		})
 
-		handlerFn := handler.GetGinHandlerFn(s.log, nil, &handlerDTO{
+		handlerFn := handler.GetGinHandlerFn(s.log, validator.New(), &handlerDTO{
 			AuthOptOut: false,
 		})
 		handlerFn(c)
@@ -654,7 +654,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 			},
 		})
 
-		handlerFn := handler.GetGinHandlerFn(s.log, nil, &handlerDTO{
+		handlerFn := handler.GetGinHandlerFn(s.log, validator.New(), &handlerDTO{
 			AuthOptOut: false,
 		})
 		handlerFn(c)
@@ -1068,17 +1068,12 @@ func (QueryParameters) Source() ArgumentDataSource {
 
 // HeaderParameters - struct to be loaded from provided headers - by definition - it is an array.
 type HeaderParameters struct {
-	OrgIdParameter []string `mapstructure:"x-org-id"`
+	OrgIdParameter []string `mapstructure:"x-org-id" validate:"required,max=1,dive,required"`
 }
 
 // Source - tells the handler where to look for the values to fill in the corresponding parameters structure - in this case - it is going to be query parameters
 func (HeaderParameters) Source() ArgumentDataSource {
 	return HeaderContextSource
-}
-
-// Check - optional interface, if implemented - the handler will check if the provided data satisfies your expectations - if not - 400 BadRequest status code would be returned
-func (h HeaderParameters) Check() bool {
-	return len(h.OrgIdParameter) == 1 && h.OrgIdParameter[0] != ""
 }
 
 type Widget struct {
@@ -1141,6 +1136,7 @@ func (d *dummyController) Handlers() []Handler {
 			Path:       "/foo/bar/:key1/fffff/:key2",
 			Method:     http.MethodPost,
 			AuthOptOut: true,
+			StatusCode: http.StatusOK,
 			Label:      "simple",
 		}).RegisterBeforeValidationHandler(func(body *TestRequestBody, a1 *QueryParameters, a2 *HeaderParameters, a3 *PathParameters) {
 			body.Value = strings.Join([]string{a1.QueryComponent[0], a2.OrgIdParameter[0], a3.ResourceID}, ",")

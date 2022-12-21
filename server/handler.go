@@ -76,6 +76,60 @@ type (
 	// return false if the user is NOT authorized
 	AuthZValidatorV2Fn func(ctx context.Context, p *iam.ArmoryCloudPrincipal) (string, bool)
 
+	// HandlerArgument represents an interface of the generic argument passed into your handler method. The argument represents
+	// a strongly typed struct with the data obtained from http's request path parameters, query parameters or headers. There is
+	// also utility implementation ArmoryPrincipalArgument which provides access to entity issuing current request.
+	// The argument's fields allow typical validation annotations - should they fail - 400 status code with details will be reported back.
+	HandlerArgument interface {
+		Source() ArgumentDataSource
+	}
+
+	// Example handler
+	// 1. most simple case
+	// 		NewHandler(func (ctx context.Context, _ server.Void) (*Response[string], serr.Error) { return SimpleResponse("hello"), nil }, HandlerConfig{
+	//			Path:       "/api/thething",
+	//			Method:     http.MethodGet, // <- optional, GET is default
+	//          StatusCode: http.StatusOK, // <- optional, 200 is default
+	//			Label:      "list resource", // <- metadata, required for test purposes when you want to test specific method
+	//		}),
+	//
+	// 2. single parameter from path
+	//      type theThingPathParams struct {
+	//           ResourceID string   `validate:"uuid-type,max=36"` // note the capitalization in resource name - required for json unmarshalling, validation is optional
+	//           ResourceType string
+	//       }
+	//
+	//      func (theThingPathParams) Source() server.ArgumentDataSource { return server.PathContextSource } // required method to tell the handler where to look for parameter's values
+	//
+	// 		New1ArgHandler(func (ctx context.Context, _ server.Void, args theThingPathParams) (*Response[string], serr.Error) { return SimpleResponse("hello"), nil }, HandlerConfig{
+	//			Path:       "/api/thething/:resourceId/type/:resourceType",
+	//			Method:     http.MethodGet, // <- optional, GET is default
+	//          StatusCode: http.StatusOK, // <- optional, 200 is default
+	//			Label:      "get resource", // <- metadata, required for test purposes when you want to test specific method
+	//		}),
+	//
+	// 3. parameters from path and from headers, as well as currently logged principal
+	//      type theThingPathParams struct {
+	//           ResourceID string   `validate:"uuid-type,max=36"` // note the capitalization in resource name - required for json unmarshalling, validation is optional
+	//           ResourceType string
+	//       }
+	//
+	//      func (theThingPathParams) Source() server.ArgumentDataSource { return server.PathContextSource } // required method to tell the handler where to look for parameter's values
+	//
+	//      type keyHeaderParams struct {
+	//          LicenseKeyHeader []string `mapstructure:"x-key-id" validate:"required,max=1,dive,required"` // tells to look for header in x-key-id header as well as enforces that one value of the header is provided
+	//      }
+	//
+	//	    func (keyHeaderParams) Source() server.ArgumentDataSource { return server.HeaderContextSource } // required method to tell the handler where to look for parameter's values
+	//
+	//	    func (k keyHeaderParams) license() string { return k.LicenseKeyHeader[0] } // utility method to simplify handling of the parameter - it is ensured to be valid, so no additional checks required here
+	//
+	// 		New3ArgHandler(func (ctx context.Context, _ server.Void, args theThingPathParams, licenseParam keyHeaderParams, caller ArmoryPrincipalArgument) (*Response[string], serr.Error) { return SimpleResponse("hello"), nil }, HandlerConfig{
+	//			Path:       "/api/thething/:resourceId/type/:resourceType",
+	//			Method:     http.MethodPost,
+	//          StatusCode: http.StatusOK, // <- optional, 200 is default
+	//			Label:      "create resource", // <- metadata, required for test purposes when you want to test specific method
+	//		}),
 	beforeRequestValidateFn func(ctx context.Context)
 
 	handler[T, U any] struct {
@@ -85,16 +139,7 @@ type (
 	}
 
 	handleRequestDelegate[T, U any]        func(ctx context.Context, request T) (*Response[U], serr.Error)
-	extractRequestArgumentsDelegate[T any] func(ctx context.Context, request *T) (interface{}, serr.Error)
-
-	HandlerArgument interface {
-		Source() ArgumentDataSource
-	}
-
-	ValidatableHandlerArgument interface {
-		HandlerArgument
-		Check() bool
-	}
+	extractRequestArgumentsDelegate[T any] func(ctx context.Context, request *T, validate *validator.Validate) (interface{}, serr.Error)
 
 	ArmoryPrincipalArgument struct {
 		*iam.ArmoryCloudPrincipal
