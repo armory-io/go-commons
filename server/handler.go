@@ -23,6 +23,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/zap"
+	"net/http"
 )
 
 type (
@@ -84,52 +85,6 @@ type (
 		Source() ArgumentDataSource
 	}
 
-	// Example handler
-	// 1. most simple case
-	// 		NewHandler(func (ctx context.Context, _ server.Void) (*Response[string], serr.Error) { return SimpleResponse("hello"), nil }, HandlerConfig{
-	//			Path:       "/api/thething",
-	//			Method:     http.MethodGet, // <- optional, GET is default
-	//          StatusCode: http.StatusOK, // <- optional, 200 is default
-	//			Label:      "list resource", // <- metadata, required for test purposes when you want to test specific method
-	//		}),
-	//
-	// 2. single parameter from path
-	//      type theThingPathParams struct {
-	//           ResourceID string   `validate:"uuid-type,max=36"` // note the capitalization in resource name - required for json unmarshalling, validation is optional
-	//           ResourceType string
-	//       }
-	//
-	//      func (theThingPathParams) Source() server.ArgumentDataSource { return server.PathContextSource } // required method to tell the handler where to look for parameter's values
-	//
-	// 		New1ArgHandler(func (ctx context.Context, _ server.Void, args theThingPathParams) (*Response[string], serr.Error) { return SimpleResponse("hello"), nil }, HandlerConfig{
-	//			Path:       "/api/thething/:resourceId/type/:resourceType",
-	//			Method:     http.MethodGet, // <- optional, GET is default
-	//          StatusCode: http.StatusOK, // <- optional, 200 is default
-	//			Label:      "get resource", // <- metadata, required for test purposes when you want to test specific method
-	//		}),
-	//
-	// 3. parameters from path and from headers, as well as currently logged principal
-	//      type theThingPathParams struct {
-	//           ResourceID string   `validate:"uuid-type,max=36"` // note the capitalization in resource name - required for json unmarshalling, validation is optional
-	//           ResourceType string
-	//       }
-	//
-	//      func (theThingPathParams) Source() server.ArgumentDataSource { return server.PathContextSource } // required method to tell the handler where to look for parameter's values
-	//
-	//      type keyHeaderParams struct {
-	//          LicenseKeyHeader []string `mapstructure:"x-key-id" validate:"required,max=1,dive,required"` // tells to look for header in x-key-id header as well as enforces that one value of the header is provided
-	//      }
-	//
-	//	    func (keyHeaderParams) Source() server.ArgumentDataSource { return server.HeaderContextSource } // required method to tell the handler where to look for parameter's values
-	//
-	//	    func (k keyHeaderParams) license() string { return k.LicenseKeyHeader[0] } // utility method to simplify handling of the parameter - it is ensured to be valid, so no additional checks required here
-	//
-	// 		New3ArgHandler(func (ctx context.Context, _ server.Void, args theThingPathParams, licenseParam keyHeaderParams, caller ArmoryPrincipalArgument) (*Response[string], serr.Error) { return SimpleResponse("hello"), nil }, HandlerConfig{
-	//			Path:       "/api/thething/:resourceId/type/:resourceType",
-	//			Method:     http.MethodPost,
-	//          StatusCode: http.StatusOK, // <- optional, 200 is default
-	//			Label:      "create resource", // <- metadata, required for test purposes when you want to test specific method
-	//		}),
 	beforeRequestValidateFn func(ctx context.Context)
 
 	handler[T, U any] struct {
@@ -162,6 +117,70 @@ type (
 		*handler[REQUEST, RESPONSE]
 	}
 )
+
+func Example_Handler() {
+	//  most trivial case
+
+	NewHandler(func(ctx context.Context, _ Void) (*Response[string], serr.Error) {
+		return SimpleResponse("hello"), nil
+	}, HandlerConfig{
+		Path:       "/api/thething",
+		Method:     http.MethodGet,  // <- optional, GET is default
+		StatusCode: http.StatusOK,   // <- optional, 200 is default
+		Label:      "list resource", // <- metadata, required for test purposes when you want to test specific method
+	})
+}
+
+func Example_New1ArgHandler() {
+	// single parameter from path
+	type theThingPathParams struct {
+		ResourceID   string `validate:"uuid-type,max=36"` // note the capitalization in resource name - required for json unmarshalling, validation is optional
+		ResourceType string
+	}
+
+	// required method to tell the handler where to look for parameter's values (can't define it inline :( )
+	// func (theThingPathParams) Source() ArgumentDataSource { return server.PathContextSource }
+
+	New1ArgHandler(func(ctx context.Context, _ Void, args voidArgument /*should be replaced with theThingPathParams */) (*Response[string], serr.Error) {
+		return SimpleResponse("hello"), nil
+	}, HandlerConfig{
+		Path:       "/api/thething/:resourceId/type/:resourceType",
+		Method:     http.MethodGet, // <- optional, GET is default
+		StatusCode: http.StatusOK,  // <- optional, 200 is default
+		Label:      "get resource", // <- metadata, required for test purposes when you want to test specific method
+	})
+
+}
+
+func Example_New3ArgHandler() {
+	//  parameters from path and from headers, as well as currently logged principal
+	type theThingPathParams struct {
+		ResourceID   string `validate:"uuid-type,max=36"` // note the capitalization in resource name - required for json unmarshalling, validation is optional
+		ResourceType string
+	}
+
+	// required method to tell the handler where to look for parameter's values (can't be defined inline)
+	// func (theThingPathParams) Source() server.ArgumentDataSource { return server.PathContextSource }
+
+	type keyHeaderParams struct {
+		LicenseKeyHeader []string `mapstructure:"x-key-id" validate:"required,max=1,dive,required"` // tells to look for header in x-key-id header as well as enforces that one value of the header is provided
+	}
+
+	// required method to tell the handler where to look for parameter's values (can't be defined inline)
+	// func (keyHeaderParams) Source() server.ArgumentDataSource { return server.HeaderContextSource } // required method to tell the handler where to look for parameter's values
+	//
+	// utility method to simplify handling of the parameter - it is ensured to be valid, so no additional checks required here (can't be defined inline)
+	// func (k keyHeaderParams) license() string { return k.LicenseKeyHeader[0] }
+	//
+	New3ArgHandler(func(ctx context.Context, _ Void, args voidArgument /*theThingPathParams*/, licenseParam voidArgument /* keyHeaderParams*/, caller ArmoryPrincipalArgument) (*Response[string], serr.Error) {
+		return SimpleResponse("hello"), nil
+	}, HandlerConfig{
+		Path:       "/api/thething/:resourceId/type/:resourceType",
+		Method:     http.MethodPost,
+		StatusCode: http.StatusOK,     // <- optional, 200 is default
+		Label:      "create resource", // <- metadata, required for test purposes when you want to test specific method
+	})
+}
 
 const (
 	voidArgumentSource  ArgumentDataSource = -1
