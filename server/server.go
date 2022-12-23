@@ -227,9 +227,16 @@ type (
 		PathParameters map[string]string
 		// RequestPath the string representing requested resources i.e. /api/v1/organizations/:orgID/...
 		RequestPath string
+		// LoggingMetadata
+		LoggingMetadata LoggingMetadata
 	}
 
-	requestDetailsKey struct{}
+	LoggingMetadata struct {
+		Logger   *zap.SugaredLogger
+		Metadata []any
+	}
+
+	RequestDetailsKey struct{}
 
 	requestArgumentsKey struct{}
 )
@@ -432,7 +439,7 @@ func (a *noopAuthService) VerifyPrincipalAndSetContext(tokenOrRawHeader string, 
 
 // AddRequestDetailsToCtx is exposed for testing and allows tests to configure the request details when testing handler functions
 func AddRequestDetailsToCtx(ctx context.Context, details RequestDetails) context.Context {
-	return context.WithValue(ctx, requestDetailsKey{}, details)
+	return context.WithValue(ctx, RequestDetailsKey{}, details)
 }
 
 // ExtractPrincipalFromContext retrieves the principal from the context and returns a serr.Error
@@ -446,7 +453,7 @@ func ExtractPrincipalFromContext(ctx context.Context) (*iam.ArmoryCloudPrincipal
 
 // ExtractRequestDetailsFromContext fetches the server.RequestDetails from the context
 func ExtractRequestDetailsFromContext(ctx context.Context) (*RequestDetails, serr.Error) {
-	v, ok := ctx.Value(requestDetailsKey{}).(RequestDetails)
+	v, ok := ctx.Value(RequestDetailsKey{}).(RequestDetails)
 	if !ok {
 		return nil, serr.NewErrorResponseFromApiError(unableToExtractRequestDetails)
 	}
@@ -497,7 +504,11 @@ func ginHOF[REQUEST, RESPONSE any](
 			}
 		}()
 
-		onPrepareRequestContext(c)
+		loggingMetadata := extractLoggingMetadata(c.Request.Context())
+		onPrepareRequestContext(c, LoggingMetadata{
+			Logger:   logger.With(loggingMetadata...),
+			Metadata: loggingMetadata,
+		})
 
 		if !onAuthorizeRequest(c, handler, logger) {
 			return
@@ -534,13 +545,14 @@ func onRequestCompleted(c *gin.Context, logger *zap.SugaredLogger, panicReason a
 	), logger)
 }
 
-func onPrepareRequestContext(c *gin.Context) {
+func onPrepareRequestContext(c *gin.Context, loggingMetadata LoggingMetadata) {
 	// Stuff Request details into the context
 	requestDetails := RequestDetails{
 		QueryParameters: c.Request.URL.Query(),
 		PathParameters:  extractPathParameters(c),
 		Headers:         c.Request.Header,
 		RequestPath:     c.Request.URL.Path,
+		LoggingMetadata: loggingMetadata,
 	}
 	c.Request = c.Request.WithContext(AddRequestDetailsToCtx(c.Request.Context(), requestDetails))
 }
@@ -577,7 +589,7 @@ func onExtractRequestBodyAndParameters[REQUEST any](
 		writeAndLogApiErrorThenAbort(c, apiError, logger)
 		return nil, false
 	}
-	
+
 	c.Request = c.Request.WithContext(addRequestArgumentsToCtx(c.Request.Context(), args))
 
 	if shouldValidateBody {
@@ -1075,6 +1087,30 @@ func requestLogger(log *zap.SugaredLogger, config RequestLoggingConfiguration) g
 		}
 
 	}
+}
+
+func extractLoggingMetadata(ctx context.Context) []any {
+	var fields []any
+
+	span := trace.SpanFromContext(ctx)
+	traceId := span.SpanContext().TraceID().String()
+	if traceId != "" {
+		fields = append(fields, "trace.id", traceId)
+	}
+	spanId := span.SpanContext().SpanID().String()
+	if spanId != "" {
+		fields = append(fields, "span.id", spanId)
+	}
+
+	// Add metadata about the request principal if present to the logging fields
+	principal, _ := iam.ExtractPrincipalFromContext(ctx)
+	if principal != nil {
+		fields = append(fields, "tenant", principal.Tenant())
+		fields = append(fields, "principal-name", principal.Name)
+		fields = append(fields, "principal-type", string(principal.Type))
+	}
+
+	return fields
 }
 
 func extractHandlerArgumentFromContext[CTX HandlerArgument](c context.Context, v *validator.Validate) (*CTX, serr.Error) {

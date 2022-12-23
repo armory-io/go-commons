@@ -2,6 +2,7 @@ package temporal
 
 import (
 	"context"
+	"github.com/armory-io/go-commons/server"
 	"go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/interceptor"
@@ -19,7 +20,7 @@ type (
 
 	LoggerField struct {
 		Key   string `json:"key"`
-		Value string `json:"value"`
+		Value any    `json:"value"`
 	}
 )
 
@@ -36,16 +37,18 @@ func ExtractLoggerMetadata(header *common.Header) (map[string]string, error) {
 
 	out := make(map[string]string)
 	for _, field := range fields {
-		out[field.Key] = field.Value
+		out[field.Key] = field.Value.(string)
 	}
 	return out, nil
 }
 
 func WithFields(ctx context.Context, fields ...LoggerField) context.Context {
+	fields = append(fields, extractFields(ctx)...)
 	return context.WithValue(ctx, loggerContextKey{}, setFields(ctx, fields...))
 }
 
 func WithWorkflowFields(ctx workflow.Context, fields ...LoggerField) workflow.Context {
+	fields = append(fields, extractFields(ctx)...)
 	return workflow.WithValue(ctx, loggerContextKey{}, setFields(ctx, fields...))
 }
 
@@ -165,11 +168,11 @@ func (w *workflowOutboundLoggerInterceptor) GetLogger(ctx workflow.Context) log.
 	return withFields(logger, getFields(ctx))
 }
 
-type valuer interface {
+type LoggingValuer interface {
 	Value(any) any
 }
 
-func getFields(ctx valuer) []LoggerField {
+func getFields(ctx LoggingValuer) []LoggerField {
 	m, ok := ctx.Value(loggerContextKey{}).(*sync.Map)
 	if !ok {
 		return nil
@@ -193,7 +196,7 @@ func withFields(logger log.Logger, fields []LoggerField) log.Logger {
 	return log.With(logger, raw...)
 }
 
-func setFields(ctx valuer, fields ...LoggerField) *sync.Map {
+func setFields(ctx LoggingValuer, fields ...LoggerField) *sync.Map {
 	m, ok := ctx.Value(loggerContextKey{}).(*sync.Map)
 	if !ok {
 		m = &sync.Map{}
@@ -204,4 +207,22 @@ func setFields(ctx valuer, fields ...LoggerField) *sync.Map {
 	}
 
 	return m
+}
+
+func extractFields(ctx LoggingValuer) []LoggerField {
+	var fields []LoggerField
+	v, ok := ctx.Value(server.RequestDetailsKey{}).(server.RequestDetails)
+	if !ok {
+		return fields
+	}
+
+	loggingMetadata := v.LoggingMetadata.Metadata
+	for i := 0; i < len(loggingMetadata); i += 2 {
+		loggerField := LoggerField{
+			Key:   loggingMetadata[i].(string),
+			Value: loggingMetadata[i+1],
+		}
+		fields = append(fields, loggerField)
+	}
+	return fields
 }

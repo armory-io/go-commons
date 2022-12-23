@@ -7,7 +7,7 @@ import (
 	"github.com/armory-io/go-commons/integration_utils"
 	"github.com/armory-io/go-commons/logging"
 	"github.com/go-sql-driver/mysql"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"go.uber.org/zap/zapcore"
 	"gotest.tools/assert"
@@ -114,7 +114,7 @@ func TestSqlTransaction(t *testing.T) {
 						_ = row.Scan(&cnt)
 						assert.Equal(t, 0, cnt)
 						sync <- true
-						log.Warn("read scope complete!")
+						logrus.Warn("read scope complete!")
 						return err
 					})
 					done <- err
@@ -128,7 +128,7 @@ func TestSqlTransaction(t *testing.T) {
 						sync <- true
 						time.Sleep(time.Second)
 						_ = <-sync
-						log.Warn("write scope complete!")
+						logrus.Warn("write scope complete!")
 						return err
 					})
 					done <- err
