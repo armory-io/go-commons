@@ -184,14 +184,13 @@ func newHandlerRegistry(name string, logger *zap.SugaredLogger, requestValidator
 }
 
 func configureHandler(handler Handler, controller IController, logger *zap.SugaredLogger, requestValidator *validator.Validate, registryData map[handlerDTOKey]map[string]*handlerDTO) error {
-	var validators []AuthZValidatorV2Fn
+	validators := make([]AuthZValidatorV2Fn, 0)
 	hDTO := &handlerDTO{
-		Path:            strings.TrimSuffix(strings.TrimSpace(handler.Config().Path), "/"),
-		Method:          strings.TrimSpace(handler.Config().Method),
-		AuthZValidators: validators,
-		AuthOptOut:      handler.Config().AuthOptOut,
-		StatusCode:      handler.Config().StatusCode,
-		Default:         handler.Config().Default,
+		Path:       strings.TrimSuffix(strings.TrimSpace(handler.Config().Path), "/"),
+		Method:     strings.TrimSpace(handler.Config().Method),
+		AuthOptOut: handler.Config().AuthOptOut,
+		StatusCode: handler.Config().StatusCode,
+		Default:    handler.Config().Default,
 	}
 
 	if handler.Config().AuthZValidator != nil {
@@ -270,6 +269,8 @@ func configureHandler(handler Handler, controller IController, logger *zap.Sugar
 	if hDTO.StatusCode == 0 {
 		hDTO.StatusCode = http.StatusOK
 	}
+
+	hDTO.AuthZValidators = validators
 
 	hDTO.HandlerFn = handler.GetGinHandlerFn(logger, requestValidator, hDTO)
 
