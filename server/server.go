@@ -236,7 +236,7 @@ type (
 		Metadata map[string]string
 	}
 
-	RequestDetailsKey struct{}
+	requestDetailsKey struct{}
 
 	requestArgumentsKey struct{}
 )
@@ -439,7 +439,7 @@ func (a *noopAuthService) VerifyPrincipalAndSetContext(tokenOrRawHeader string, 
 
 // AddRequestDetailsToCtx is exposed for testing and allows tests to configure the request details when testing handler functions
 func AddRequestDetailsToCtx(ctx context.Context, details RequestDetails) context.Context {
-	return context.WithValue(ctx, RequestDetailsKey{}, details)
+	return context.WithValue(ctx, requestDetailsKey{}, details)
 }
 
 // ExtractPrincipalFromContext retrieves the principal from the context and returns a serr.Error
@@ -451,9 +451,13 @@ func ExtractPrincipalFromContext(ctx context.Context) (*iam.ArmoryCloudPrincipal
 	return principal, nil
 }
 
+type requestDetailsContext interface {
+	Value(any) any
+}
+
 // ExtractRequestDetailsFromContext fetches the server.RequestDetails from the context
-func ExtractRequestDetailsFromContext(ctx context.Context) (*RequestDetails, serr.Error) {
-	v, ok := ctx.Value(RequestDetailsKey{}).(RequestDetails)
+func ExtractRequestDetailsFromContext(ctx requestDetailsContext) (*RequestDetails, serr.Error) {
+	v, ok := ctx.Value(requestDetailsKey{}).(RequestDetails)
 	if !ok {
 		return nil, serr.NewErrorResponseFromApiError(unableToExtractRequestDetails)
 	}

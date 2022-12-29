@@ -169,11 +169,11 @@ func (w *workflowOutboundLoggerInterceptor) GetLogger(ctx workflow.Context) log.
 	return withFields(logger, getFields(ctx))
 }
 
-type LoggingValuer interface {
+type valuer interface {
 	Value(any) any
 }
 
-func getFields(ctx LoggingValuer) []LoggerField {
+func getFields(ctx valuer) []LoggerField {
 	m, ok := ctx.Value(loggerContextKey{}).(*sync.Map)
 	if !ok {
 		return nil
@@ -197,7 +197,7 @@ func withFields(logger log.Logger, fields []LoggerField) log.Logger {
 	return log.With(logger, raw...)
 }
 
-func setFields(ctx LoggingValuer, fields ...LoggerField) *sync.Map {
+func setFields(ctx valuer, fields ...LoggerField) *sync.Map {
 	m, ok := ctx.Value(loggerContextKey{}).(*sync.Map)
 	if !ok {
 		m = &sync.Map{}
@@ -210,12 +210,12 @@ func setFields(ctx LoggingValuer, fields ...LoggerField) *sync.Map {
 	return m
 }
 
-func extractFields(ctx LoggingValuer) []LoggerField {
-	v, ok := ctx.Value(server.RequestDetailsKey{}).(server.RequestDetails)
-	if !ok {
+func extractFields(ctx valuer) []LoggerField {
+	details, err := server.ExtractRequestDetailsFromContext(ctx)
+	if err != nil {
 		return []LoggerField{}
 	}
-	loggingMetadata := v.LoggingMetadata.Metadata
+	loggingMetadata := details.LoggingMetadata.Metadata
 	return lo.MapToSlice(loggingMetadata, func(k string, v string) LoggerField {
 		return LoggerField{
 			Key:   k,

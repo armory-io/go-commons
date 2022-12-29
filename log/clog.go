@@ -9,10 +9,14 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
+type LoggerValuer interface {
+	Value(any) any
+}
+
 // NewClog creates a new Clog.
-func NewClog(ctx temporal.LoggingValuer) Clog {
+func NewClog(ctx LoggerValuer) Clog {
 	if _, ok := ctx.(context.Context); ok {
-		details, err := server.ExtractRequestDetailsFromContext(ctx.(context.Context))
+		details, err := server.ExtractRequestDetailsFromContext(ctx)
 		if err != nil {
 			return Clog{
 				logger: activity.GetLogger(ctx.(context.Context)),
