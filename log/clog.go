@@ -48,26 +48,26 @@ type Clog struct {
 }
 
 // Debug logs a debug msg
-func (l *Clog) Debug(msg string, args ...interface{}) {
+func (l Clog) Debug(msg string, args ...interface{}) {
 	l.logger.Debug(msg, args...)
 }
 
 // Info logs an info msg
-func (l *Clog) Info(msg string, args ...interface{}) {
+func (l Clog) Info(msg string, args ...interface{}) {
 	l.logger.Info(msg, args...)
 }
 
 // Error logs an error msg
-func (l *Clog) Error(msg string, args ...interface{}) {
+func (l Clog) Error(msg string, args ...interface{}) {
 	l.logger.Error(msg, args...)
 }
 
 // Warn logs a warn msg
-func (l *Clog) Warn(msg string, args ...interface{}) {
+func (l Clog) Warn(msg string, args ...interface{}) {
 	l.logger.Warn(msg, args)
 }
 
-func (l *Clog) With(args ...interface{}) Clog {
+func (l Clog) With(args ...interface{}) Clog {
 	return Clog{
 		logger: log.With(l.logger, args...),
 	}

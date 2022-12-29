@@ -21,7 +21,7 @@ type (
 
 	LoggerField struct {
 		Key   string `json:"key"`
-		Value any    `json:"value"`
+		Value string `json:"value"`
 	}
 )
 
@@ -38,7 +38,7 @@ func ExtractLoggerMetadata(header *common.Header) (map[string]string, error) {
 
 	out := make(map[string]string)
 	for _, field := range fields {
-		out[field.Key] = field.Value.(string)
+		out[field.Key] = field.Value
 	}
 	return out, nil
 }
