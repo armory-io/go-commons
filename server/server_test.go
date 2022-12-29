@@ -1042,6 +1042,31 @@ func (s *ServerTestSuite) TestGinHOF() {
 		assert.Equal(t, http.StatusOK, code)
 		assert.Equal(t, "Welcome mister Bond", *result)
 	})
+
+	s.T().Run("principal without permissions will get 403", func(t *testing.T) {
+		htc := NewHandlerTestContext(t, newDummyController().Controller, HandlerByLabel("onlyWithRequiredScope"))
+		ctx, handler, resp := htc.
+			WithPrincipal(t, &iam.ArmoryCloudPrincipal{Name: "Bond"}).
+			BuildHandler(t)
+
+		handler(ctx)
+
+		assert.Equal(t, http.StatusForbidden, resp.Code)
+	})
+
+	s.T().Run("principal with permissions will get 200", func(t *testing.T) {
+		htc := NewHandlerTestContext(t, newDummyController().Controller, HandlerByLabel("onlyWithRequiredScope"))
+		ctx, handler, resp := htc.
+			WithPrincipal(t, &iam.ArmoryCloudPrincipal{Name: "Cartman", Scopes: []string{"api:dummy:full"}}).
+			BuildHandler(t)
+
+		handler(ctx)
+
+		result, code := ExtractResponseDataAndCode[string](t, resp)
+
+		assert.Equal(t, http.StatusOK, code)
+		assert.Equal(t, "you shall pass", *result)
+	})
 }
 
 type Book struct {
@@ -1143,6 +1168,10 @@ func (*dummyController) StringPassThroughWithPrincipal(c context.Context, body s
 	return SimpleResponse(body.Prompt + p.Name), nil
 }
 
+func (*dummyController) RestrictedTo_Api_Dummy_Full(_ context.Context, _ Void) (*Response[string], serr.Error) {
+	return SimpleResponse("you shall pass"), nil
+}
+
 func (d *dummyController) Handlers() []Handler {
 	return []Handler{
 		New3ArgHandler(d.SimpleOperation, HandlerConfig{
@@ -1169,6 +1198,18 @@ func (d *dummyController) Handlers() []Handler {
 			Method:     http.MethodPost,
 			AuthOptOut: true,
 			Label:      "passThroughWithPrincipal",
+		}),
+
+		NewHandler(d.RestrictedTo_Api_Dummy_Full, HandlerConfig{
+			Path:   "/foo/restrict",
+			Method: http.MethodGet,
+			AuthZValidatorExtended: func(ctx context.Context, p *iam.ArmoryCloudPrincipal) (string, bool) {
+				if len(p.Scopes) == 1 && p.Scopes[0] == "api:dummy:full" {
+					return "", true
+				}
+				return "you shall not pass", false
+			},
+			Label: "onlyWithRequiredScope",
 		}),
 	}
 }
