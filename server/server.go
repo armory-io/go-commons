@@ -386,7 +386,7 @@ func configureServer(
 	}
 
 	authRequiredGroup := g.Group(httpConfig.Prefix)
-	authRequiredGroup.Use(ginAuthMiddleware(as, logger))
+	//authRequiredGroup.Use(ginAuthMiddleware(as, logger))
 
 	handlerRegistry, err := newHandlerRegistry(name, logger, requestValidator, controllers)
 	if err != nil {
@@ -442,13 +442,33 @@ func AddRequestDetailsToCtx(ctx context.Context, details RequestDetails) context
 	return context.WithValue(ctx, RequestDetailsKey{}, details)
 }
 
+const (
+	User iam.PrincipalType = "user"
+)
+
 // ExtractPrincipalFromContext retrieves the principal from the context and returns a serr.Error
 func ExtractPrincipalFromContext(ctx context.Context) (*iam.ArmoryCloudPrincipal, serr.Error) {
-	principal, err := iam.ExtractPrincipalFromContext(ctx)
-	if err != nil {
-		return nil, serr.NewErrorResponseFromApiError(invalidCredentialsError, serr.WithCause(err))
-	}
-	return principal, nil
+	//principal, err := iam.ExtractPrincipalFromContext(ctx)
+	//if err != nil {
+	//	return nil, serr.NewErrorResponseFromApiError(invalidCredentialsError, serr.WithCause(err))
+	//}
+	return &iam.ArmoryCloudPrincipal{
+		Name:        "frankie",
+		Type:        User,
+		OrgId:       "org-id",
+		OrgName:     "dogz that deploy",
+		EnvId:       "env-id",
+		ArmoryAdmin: false,
+		Scopes: []string{
+			"api:organization:full",
+			"openid",
+			"profile",
+			"email",
+		},
+		Roles: []string{
+			"Org Admin",
+		},
+	}, nil
 }
 
 // ExtractRequestDetailsFromContext fetches the server.RequestDetails from the context
