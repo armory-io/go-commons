@@ -59,11 +59,9 @@ func (s *ServerTestSuite) TestGinHOF() {
 			},
 			RequestPath: "/id/bar",
 			LoggingMetadata: LoggingMetadata{
-				Metadata: []interface{}{
-					"trace.id",
-					"00000000000000000000000000000000",
-					"span.id",
-					"0000000000000000",
+				Metadata: map[string]string{
+					"trace.id": "00000000000000000000000000000000",
+					"span.id":  "0000000000000000",
 				},
 			},
 		}

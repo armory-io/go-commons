@@ -3,6 +3,7 @@ package temporal
 import (
 	"context"
 	"github.com/armory-io/go-commons/server"
+	"github.com/samber/lo"
 	"go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/interceptor"
@@ -210,19 +211,15 @@ func setFields(ctx LoggingValuer, fields ...LoggerField) *sync.Map {
 }
 
 func extractFields(ctx LoggingValuer) []LoggerField {
-	var fields []LoggerField
 	v, ok := ctx.Value(server.RequestDetailsKey{}).(server.RequestDetails)
 	if !ok {
-		return fields
+		return []LoggerField{}
 	}
-
 	loggingMetadata := v.LoggingMetadata.Metadata
-	for i := 0; i < len(loggingMetadata); i += 2 {
-		loggerField := LoggerField{
-			Key:   loggingMetadata[i].(string),
-			Value: loggingMetadata[i+1],
+	return lo.MapToSlice(loggingMetadata, func(k string, v string) LoggerField {
+		return LoggerField{
+			Key:   k,
+			Value: v,
 		}
-		fields = append(fields, loggerField)
-	}
-	return fields
+	})
 }

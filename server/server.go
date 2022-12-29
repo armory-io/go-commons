@@ -233,7 +233,7 @@ type (
 
 	LoggingMetadata struct {
 		Logger   *zap.SugaredLogger
-		Metadata []any
+		Metadata map[string]string
 	}
 
 	RequestDetailsKey struct{}
@@ -506,8 +506,10 @@ func ginHOF[REQUEST, RESPONSE any](
 
 		loggingMetadata := extractLoggingMetadata(c.Request.Context())
 		onPrepareRequestContext(c, LoggingMetadata{
-			Logger:   logger.With(loggingMetadata...),
-			Metadata: loggingMetadata,
+			Logger: logger.With(lo.ToAnySlice[string](loggingMetadata)...),
+			Metadata: lo.Associate(loggingMetadata, func(str string) (string, string) {
+				return str, str
+			}),
 		})
 
 		if !onAuthorizeRequest(c, handler, logger) {
@@ -1024,23 +1026,8 @@ func getBaseFields(
 	// Add the full request uri, which will include query params to logging fields
 	fields = append(fields, "uri", request.RequestURI)
 
-	span := trace.SpanFromContext(request.Context())
-	traceId := span.SpanContext().TraceID().String()
-	if traceId != "" {
-		fields = append(fields, "traceId", traceId)
-	}
-	spanId := span.SpanContext().SpanID().String()
-	if spanId != "" {
-		fields = append(fields, "spanId", spanId)
-	}
+	fields = append(fields, lo.ToAnySlice[string](extractLoggingMetadata(request.Context()))...)
 
-	// Add metadata about the request principal if present to the logging fields
-	principal, _ := iam.ExtractPrincipalFromContext(request.Context())
-	if principal != nil {
-		fields = append(fields, "tenant", principal.Tenant())
-		fields = append(fields, "principal-name", principal.Name)
-		fields = append(fields, "principal-type", principal.Type)
-	}
 	return fields
 }
 
@@ -1089,8 +1076,8 @@ func requestLogger(log *zap.SugaredLogger, config RequestLoggingConfiguration) g
 	}
 }
 
-func extractLoggingMetadata(ctx context.Context) []any {
-	var fields []any
+func extractLoggingMetadata(ctx context.Context) []string {
+	var fields []string
 
 	span := trace.SpanFromContext(ctx)
 	traceId := span.SpanContext().TraceID().String()
