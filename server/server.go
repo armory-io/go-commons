@@ -506,10 +506,8 @@ func ginHOF[REQUEST, RESPONSE any](
 
 		loggingMetadata := extractLoggingMetadata(c.Request.Context())
 		onPrepareRequestContext(c, LoggingMetadata{
-			Logger: logger.With(lo.ToAnySlice[string](loggingMetadata)...),
-			Metadata: lo.Associate(loggingMetadata, func(str string) (string, string) {
-				return str, str
-			}),
+			Logger:   logger.With(extractLoggingFields(loggingMetadata)...),
+			Metadata: loggingMetadata,
 		})
 
 		if !onAuthorizeRequest(c, handler, logger) {
@@ -1026,7 +1024,7 @@ func getBaseFields(
 	// Add the full request uri, which will include query params to logging fields
 	fields = append(fields, "uri", request.RequestURI)
 
-	fields = append(fields, lo.ToAnySlice[string](extractLoggingMetadata(request.Context()))...)
+	fields = append(fields, extractLoggingFields(extractLoggingMetadata(request.Context()))...)
 
 	return fields
 }
@@ -1076,27 +1074,35 @@ func requestLogger(log *zap.SugaredLogger, config RequestLoggingConfiguration) g
 	}
 }
 
-func extractLoggingMetadata(ctx context.Context) []string {
-	var fields []string
+func extractLoggingMetadata(ctx context.Context) map[string]string {
+	fields := map[string]string{}
 
 	span := trace.SpanFromContext(ctx)
 	traceId := span.SpanContext().TraceID().String()
 	if traceId != "" {
-		fields = append(fields, "trace.id", traceId)
+		fields["trace.id"] = traceId
 	}
 	spanId := span.SpanContext().SpanID().String()
 	if spanId != "" {
-		fields = append(fields, "span.id", spanId)
+		fields["span.id"] = spanId
 	}
 
 	// Add metadata about the request principal if present to the logging fields
 	principal, _ := iam.ExtractPrincipalFromContext(ctx)
 	if principal != nil {
-		fields = append(fields, "tenant", principal.Tenant())
-		fields = append(fields, "principal-name", principal.Name)
-		fields = append(fields, "principal-type", string(principal.Type))
+		fields["tenant"] = principal.Tenant()
+		fields["principal-name"] = principal.Name
+		fields["principal-type"] = string(principal.Type)
 	}
 
+	return fields
+}
+
+func extractLoggingFields(metadata map[string]string) []any {
+	var fields []any
+	for k, v := range metadata {
+		fields = append(fields, k, v)
+	}
 	return fields
 }
 
