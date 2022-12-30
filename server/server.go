@@ -510,7 +510,7 @@ func ginHOF[REQUEST, RESPONSE any](
 
 		loggingMetadata := extractLoggingMetadata(c.Request.Context())
 		onPrepareRequestContext(c, LoggingMetadata{
-			Logger:   logger.With(extractLoggingFields(loggingMetadata)...),
+			Logger:   logger.With(ExtractLoggingFields(loggingMetadata)...),
 			Metadata: loggingMetadata,
 		})
 
@@ -1028,7 +1028,7 @@ func getBaseFields(
 	// Add the full request uri, which will include query params to logging fields
 	fields = append(fields, "uri", request.RequestURI)
 
-	fields = append(fields, extractLoggingFields(extractLoggingMetadata(request.Context()))...)
+	fields = append(fields, ExtractLoggingFields(extractLoggingMetadata(request.Context()))...)
 
 	return fields
 }
@@ -1102,7 +1102,7 @@ func extractLoggingMetadata(ctx context.Context) map[string]string {
 	return fields
 }
 
-func extractLoggingFields(metadata map[string]string) []any {
+func ExtractLoggingFields(metadata map[string]string) []any {
 	var fields []any
 	for k, v := range metadata {
 		fields = append(fields, k, v)
