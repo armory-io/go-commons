@@ -58,6 +58,12 @@ func (s *ServerTestSuite) TestGinHOF() {
 				"foo": "bar",
 			},
 			RequestPath: "/id/bar",
+			LoggingMetadata: LoggingMetadata{
+				Metadata: map[string]string{
+					"trace.id": "00000000000000000000000000000000",
+					"span.id":  "0000000000000000",
+				},
+			},
 		}
 		handler := &handlerDTO{
 			AuthOptOut: true,
@@ -86,7 +92,14 @@ func (s *ServerTestSuite) TestGinHOF() {
 			actual, _ = ExtractRequestDetailsFromContext(ctx)
 			return nil, nil
 		}, nil, handler, nil, &HandlerExtensionPoints{}, s.log)(c)
-		assert.Equal(s.T(), expected, actual)
+		assert.Equal(s.T(), expected.Headers, actual.Headers)
+		assert.Equal(s.T(), expected.QueryParameters, actual.QueryParameters)
+		assert.Equal(s.T(), expected.PathParameters, actual.PathParameters)
+		assert.Equal(s.T(), expected.RequestPath, actual.RequestPath)
+		assert.NotEmpty(s.T(), actual.LoggingMetadata)
+		assert.Equal(s.T(), expected.LoggingMetadata.Metadata, actual.LoggingMetadata.Metadata)
+		assert.NotEmpty(s.T(), actual.LoggingMetadata.Logger)
+
 	})
 
 	s.T().Run("ginHOF should return the expected API error if the principal isn't in the request context", func(t *testing.T) {

@@ -2,6 +2,8 @@ package temporal
 
 import (
 	"context"
+	"github.com/armory-io/go-commons/server"
+	"github.com/samber/lo"
 	"go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/interceptor"
@@ -42,10 +44,12 @@ func ExtractLoggerMetadata(header *common.Header) (map[string]string, error) {
 }
 
 func WithFields(ctx context.Context, fields ...LoggerField) context.Context {
+	fields = append(fields, extractFields(ctx)...)
 	return context.WithValue(ctx, loggerContextKey{}, setFields(ctx, fields...))
 }
 
 func WithWorkflowFields(ctx workflow.Context, fields ...LoggerField) workflow.Context {
+	fields = append(fields, extractFields(ctx)...)
 	return workflow.WithValue(ctx, loggerContextKey{}, setFields(ctx, fields...))
 }
 
@@ -204,4 +208,18 @@ func setFields(ctx valuer, fields ...LoggerField) *sync.Map {
 	}
 
 	return m
+}
+
+func extractFields(ctx valuer) []LoggerField {
+	details, err := server.ExtractRequestDetailsFromContext(ctx)
+	if err != nil {
+		return []LoggerField{}
+	}
+	loggingMetadata := details.LoggingMetadata.Metadata
+	return lo.MapToSlice(loggingMetadata, func(k string, v string) LoggerField {
+		return LoggerField{
+			Key:   k,
+			Value: v,
+		}
+	})
 }

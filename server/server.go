@@ -227,6 +227,13 @@ type (
 		PathParameters map[string]string
 		// RequestPath the string representing requested resources i.e. /api/v1/organizations/:orgID/...
 		RequestPath string
+		// LoggingMetadata
+		LoggingMetadata LoggingMetadata
+	}
+
+	LoggingMetadata struct {
+		Logger   *zap.SugaredLogger
+		Metadata map[string]string
 	}
 
 	requestDetailsKey struct{}
@@ -444,8 +451,12 @@ func ExtractPrincipalFromContext(ctx context.Context) (*iam.ArmoryCloudPrincipal
 	return principal, nil
 }
 
+type requestDetailsContext interface {
+	Value(any) any
+}
+
 // ExtractRequestDetailsFromContext fetches the server.RequestDetails from the context
-func ExtractRequestDetailsFromContext(ctx context.Context) (*RequestDetails, serr.Error) {
+func ExtractRequestDetailsFromContext(ctx requestDetailsContext) (*RequestDetails, serr.Error) {
 	v, ok := ctx.Value(requestDetailsKey{}).(RequestDetails)
 	if !ok {
 		return nil, serr.NewErrorResponseFromApiError(unableToExtractRequestDetails)
@@ -497,7 +508,11 @@ func ginHOF[REQUEST, RESPONSE any](
 			}
 		}()
 
-		onPrepareRequestContext(c)
+		loggingMetadata := extractLoggingMetadata(c.Request.Context())
+		onPrepareRequestContext(c, LoggingMetadata{
+			Logger:   logger.With(ExtractLoggingFields(loggingMetadata)...),
+			Metadata: loggingMetadata,
+		})
 
 		if !onAuthorizeRequest(c, handler, logger) {
 			return
@@ -534,13 +549,14 @@ func onRequestCompleted(c *gin.Context, logger *zap.SugaredLogger, panicReason a
 	), logger)
 }
 
-func onPrepareRequestContext(c *gin.Context) {
+func onPrepareRequestContext(c *gin.Context, loggingMetadata LoggingMetadata) {
 	// Stuff Request details into the context
 	requestDetails := RequestDetails{
 		QueryParameters: c.Request.URL.Query(),
 		PathParameters:  extractPathParameters(c),
 		Headers:         c.Request.Header,
 		RequestPath:     c.Request.URL.Path,
+		LoggingMetadata: loggingMetadata,
 	}
 	c.Request = c.Request.WithContext(AddRequestDetailsToCtx(c.Request.Context(), requestDetails))
 }
@@ -577,7 +593,7 @@ func onExtractRequestBodyAndParameters[REQUEST any](
 		writeAndLogApiErrorThenAbort(c, apiError, logger)
 		return nil, false
 	}
-	
+
 	c.Request = c.Request.WithContext(addRequestArgumentsToCtx(c.Request.Context(), args))
 
 	if shouldValidateBody {
@@ -1012,23 +1028,8 @@ func getBaseFields(
 	// Add the full request uri, which will include query params to logging fields
 	fields = append(fields, "uri", request.RequestURI)
 
-	span := trace.SpanFromContext(request.Context())
-	traceId := span.SpanContext().TraceID().String()
-	if traceId != "" {
-		fields = append(fields, "traceId", traceId)
-	}
-	spanId := span.SpanContext().SpanID().String()
-	if spanId != "" {
-		fields = append(fields, "spanId", spanId)
-	}
+	fields = append(fields, ExtractLoggingFields(extractLoggingMetadata(request.Context()))...)
 
-	// Add metadata about the request principal if present to the logging fields
-	principal, _ := iam.ExtractPrincipalFromContext(request.Context())
-	if principal != nil {
-		fields = append(fields, "tenant", principal.Tenant())
-		fields = append(fields, "principal-name", principal.Name)
-		fields = append(fields, "principal-type", principal.Type)
-	}
 	return fields
 }
 
@@ -1075,6 +1076,38 @@ func requestLogger(log *zap.SugaredLogger, config RequestLoggingConfiguration) g
 		}
 
 	}
+}
+
+func extractLoggingMetadata(ctx context.Context) map[string]string {
+	fields := map[string]string{}
+
+	span := trace.SpanFromContext(ctx)
+	traceId := span.SpanContext().TraceID().String()
+	if traceId != "" {
+		fields["trace.id"] = traceId
+	}
+	spanId := span.SpanContext().SpanID().String()
+	if spanId != "" {
+		fields["span.id"] = spanId
+	}
+
+	// Add metadata about the request principal if present to the logging fields
+	principal, _ := iam.ExtractPrincipalFromContext(ctx)
+	if principal != nil {
+		fields["tenant"] = principal.Tenant()
+		fields["principal-name"] = principal.Name
+		fields["principal-type"] = string(principal.Type)
+	}
+
+	return fields
+}
+
+func ExtractLoggingFields(metadata map[string]string) []any {
+	var fields []any
+	for k, v := range metadata {
+		fields = append(fields, k, v)
+	}
+	return fields
 }
 
 func extractHandlerArgumentFromContext[CTX HandlerArgument](c context.Context, v *validator.Validate) (*CTX, serr.Error) {
