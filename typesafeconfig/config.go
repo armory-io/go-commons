@@ -240,6 +240,18 @@ func recurseStringValuesAndMap(config map[string]any, valueMapper func(value str
 	for _, key := range maps.Keys(config) {
 		val := config[key]
 		valT := reflect.TypeOf(val)
+		if valT.Kind() == reflect.Slice {
+			items, ok := val.([]interface{})
+			if ok {
+				for _, item := range items {
+					if childItem, ok := item.(map[string]any); ok {
+						if err := recurseStringValuesAndMap(childItem, valueMapper); err != nil {
+							return err
+						}
+					}
+				}
+			}
+		}
 		if valT.Kind() == reflect.Map {
 			if err := recurseStringValuesAndMap(val.(map[string]any), valueMapper); err != nil {
 				return err

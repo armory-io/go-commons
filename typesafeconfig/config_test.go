@@ -38,7 +38,13 @@ type Config struct {
 	SomeStringOption  string
 	SomeUnsetValue    string
 	List              []string
+	ListOptions       []ChildOption
 	EmbeddedSubConfig EmbeddedSubConfig
+}
+
+type ChildOption struct {
+	Name  string
+	Value string
 }
 
 type TypesafeConfigTestSuite struct {
@@ -181,6 +187,20 @@ func (s *TypesafeConfigTestSuite) TestResolve() {
 			name: "test that resolve produces the expected config when using the file system and a secret value",
 			expected: &Config{
 				SomeStringOption: "v:the-value",
+				ListOptions: []ChildOption{
+					{
+						Name:  "option1",
+						Value: "v:first-value",
+					},
+					{
+						Name:  "option2",
+						Value: "v:second-value",
+					},
+					{
+						Name:  "option3",
+						Value: "v:third-value",
+					},
+				},
 			},
 			options: []Option{
 				WithBaseConfigurationNames("config-with-secret"),
