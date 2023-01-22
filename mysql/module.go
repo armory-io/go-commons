@@ -23,3 +23,9 @@ var Module = fx.Module(
 	fx.Provide(New),
 	fx.Invoke(NewMigrator),
 )
+
+var ModuleV2 = fx.Module(
+	"sql",
+	fx.Provide(New),
+	fx.Invoke(NewMigratorV2),
+)

@@ -23,6 +23,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/mysql"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/samber/lo"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"time"
@@ -56,11 +57,15 @@ type (
 		MaxOpenConnections int       `yaml:"maxOpenConnections"`
 		MaxIdleConnections int       `yaml:"maxIdleConnections"`
 		MigrationPath      string    `yaml:"migrationPath"`
+		// if set to true, no migration will be applied - use for local development only
+		SkipMigrations bool `yaml:"skipMigrations"`
 	}
 
 	MDuration struct {
 		time.Duration
 	}
+
+	VersionProvider func() (uint, error)
 )
 
 func (d *Configuration) ConnectionUrl(migration bool) (string, error) {
@@ -106,14 +111,41 @@ func NewMigrator(lc fx.Lifecycle, settings Configuration, log *zap.SugaredLogger
 
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
-			return m.migrate()
+			if !m.settings.SkipMigrations {
+				return m.migrate(nil)
+			}
+			m.log.Warn("migrations disabled")
+			return nil
 		},
 	})
 
 	return m
 }
 
-func (m *Migrator) migrate() error {
+func NewMigratorV2(lc fx.Lifecycle, settings Configuration, versionProvider VersionProvider, log *zap.SugaredLogger) *Migrator {
+	m := &Migrator{
+		settings: settings,
+		log:      log,
+	}
+
+	lc.Append(fx.Hook{
+		OnStart: func(context.Context) error {
+			if version, err := versionProvider(); err != nil {
+				m.log.Warnf("eror fetching target db version - %v", err)
+				return err
+			} else if !m.settings.SkipMigrations {
+				return m.migrate(&version)
+			} else {
+				m.log.Warn("migrations disabled")
+				return nil
+			}
+		},
+	})
+
+	return m
+}
+
+func (m *Migrator) migrate(version *uint) error {
 	databaseConfig := m.settings
 
 	c, err := databaseConfig.ConnectionUrl(true)
@@ -130,7 +162,9 @@ func (m *Migrator) migrate() error {
 	if err != nil {
 		return err
 	}
-	err = migrationInstance.Up()
+	err = lo.IfF(version == nil, migrationInstance.Up).ElseF(func() error {
+		return migrationInstance.Migrate(*version)
+	})
 	if err == migrate.ErrNoChange {
 		m.log.Infof("No change detected.")
 		return nil
