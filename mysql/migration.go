@@ -134,6 +134,7 @@ func NewMigratorV2(lc fx.Lifecycle, settings Configuration, versionProvider Vers
 				m.log.Warnf("eror fetching target db version - %v", err)
 				return err
 			} else if !m.settings.SkipMigrations {
+				m.log.Infof("setting active db version to %d", version)
 				return m.migrate(&version)
 			} else {
 				m.log.Warn("migrations disabled")
