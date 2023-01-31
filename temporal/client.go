@@ -84,7 +84,7 @@ func temporalClientOptions(logger *ZapAdapter, params ProviderParameters) (*clie
 		HostPort:           fmt.Sprintf("%s:%s", orDefault(config.Hostname, defaultHostname), orDefault(config.Port, defaultPort)),
 		Logger:             logger,
 		Namespace:          config.Namespace,
-		ContextPropagators: []workflow.ContextPropagator{NewLoggerContextPropagator()},
+		ContextPropagators: []workflow.ContextPropagator{NewLoggerContextPropagator(), NewWorkflowTraceParametersPropagator()},
 		Interceptors:       interceptors,
 	}
 
@@ -140,7 +140,7 @@ func temporalCloudClientOptions(logger *ZapAdapter, params ProviderParameters) (
 				ServerName:   serverName,
 			},
 		},
-		ContextPropagators: []workflow.ContextPropagator{NewLoggerContextPropagator()},
+		ContextPropagators: []workflow.ContextPropagator{NewLoggerContextPropagator(), NewWorkflowTraceParametersPropagator()},
 		Interceptors:       interceptors,
 	}
 

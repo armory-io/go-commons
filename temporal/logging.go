@@ -5,10 +5,12 @@ import (
 	"github.com/armory-io/go-commons/server"
 	"github.com/samber/lo"
 	"go.temporal.io/api/common/v1"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/workflow"
+
 	"sync"
 )
 
@@ -167,6 +169,14 @@ type workflowOutboundLoggerInterceptor struct {
 func (w *workflowOutboundLoggerInterceptor) GetLogger(ctx workflow.Context) log.Logger {
 	logger := w.Next.GetLogger(ctx)
 	return withFields(logger, getFields(ctx))
+}
+
+func (w *workflowOutboundLoggerInterceptor) GetMetricsHandler(ctx workflow.Context) client.MetricsHandler {
+	handler := w.Next.GetMetricsHandler(ctx)
+	if p, ok := ctx.Value(workflowTraceParametersKey{}).(*map[string]string); ok && p != nil {
+		return handler.WithTags(*p)
+	}
+	return handler
 }
 
 type valuer interface {
