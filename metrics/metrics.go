@@ -206,3 +206,15 @@ func (s *Metrics) HistogramWithTags(name string, buckets tally.Buckets, tags map
 	}
 	return s.rootScope.Tagged(tags).Histogram(name, buckets)
 }
+
+func (s *Metrics) Tagged(tags map[string]string) tally.Scope {
+	return s.rootScope.Tagged(tags)
+}
+
+func (s *Metrics) SubScope(name string) tally.Scope {
+	return s.rootScope.SubScope(name)
+}
+
+func (s *Metrics) Capabilities() tally.Capabilities {
+	return s.rootScope.Capabilities()
+}

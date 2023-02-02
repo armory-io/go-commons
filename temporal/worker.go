@@ -16,7 +16,7 @@ func WorkerProviderProvider(tracingConfig tracing.Configuration) WorkerProvider 
 }
 
 func (w *WorkerProvider) NewWorker(c client.Client, taskQueue string) (worker.Worker, error) {
-	interceptors := []interceptor.WorkerInterceptor{NewLoggerInterceptor()}
+	interceptors := []interceptor.WorkerInterceptor{newWorkflowContextInterceptor()}
 
 	// The no-op trace provider causes the interceptor to crash, which
 	// is why this package knows about the tracing config :(
