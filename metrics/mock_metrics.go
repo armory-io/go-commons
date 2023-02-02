@@ -34,6 +34,20 @@ func (m *MockMetricsSvc) EXPECT() *MockMetricsSvcMockRecorder {
 	return m.recorder
 }
 
+// Capabilities mocks base method.
+func (m *MockMetricsSvc) Capabilities() tally.Capabilities {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Capabilities")
+	ret0, _ := ret[0].(tally.Capabilities)
+	return ret0
+}
+
+// Capabilities indicates an expected call of Capabilities.
+func (mr *MockMetricsSvcMockRecorder) Capabilities() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Capabilities", reflect.TypeOf((*MockMetricsSvc)(nil).Capabilities))
+}
+
 // Counter mocks base method.
 func (m *MockMetricsSvc) Counter(name string) tally.Counter {
 	m.ctrl.T.Helper()
@@ -130,6 +144,34 @@ func (m *MockMetricsSvc) HistogramWithTags(name string, buckets tally.Buckets, t
 func (mr *MockMetricsSvcMockRecorder) HistogramWithTags(name, buckets, tags interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HistogramWithTags", reflect.TypeOf((*MockMetricsSvc)(nil).HistogramWithTags), name, buckets, tags)
+}
+
+// SubScope mocks base method.
+func (m *MockMetricsSvc) SubScope(name string) tally.Scope {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubScope", name)
+	ret0, _ := ret[0].(tally.Scope)
+	return ret0
+}
+
+// SubScope indicates an expected call of SubScope.
+func (mr *MockMetricsSvcMockRecorder) SubScope(name interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubScope", reflect.TypeOf((*MockMetricsSvc)(nil).SubScope), name)
+}
+
+// Tagged mocks base method.
+func (m *MockMetricsSvc) Tagged(tags map[string]string) tally.Scope {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Tagged", tags)
+	ret0, _ := ret[0].(tally.Scope)
+	return ret0
+}
+
+// Tagged indicates an expected call of Tagged.
+func (mr *MockMetricsSvcMockRecorder) Tagged(tags interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tagged", reflect.TypeOf((*MockMetricsSvc)(nil).Tagged), tags)
 }
 
 // Timer mocks base method.

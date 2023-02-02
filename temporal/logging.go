@@ -6,7 +6,6 @@ import (
 	"github.com/samber/lo"
 	"go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
-	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/workflow"
 	"sync"
@@ -99,74 +98,6 @@ func (p *loggerContextPropagator) ExtractToWorkflow(ctx workflow.Context, reader
 		ctx = workflow.WithValue(ctx, loggerContextKey{}, setFields(ctx, fields...))
 	}
 	return ctx, nil
-}
-
-type loggerInterceptor struct {
-	interceptor.WorkerInterceptorBase
-}
-
-func NewLoggerInterceptor() interceptor.WorkerInterceptor {
-	return &loggerInterceptor{}
-}
-
-func (w *loggerInterceptor) InterceptActivity(
-	ctx context.Context,
-	next interceptor.ActivityInboundInterceptor,
-) interceptor.ActivityInboundInterceptor {
-	i := &activityInboundLoggerInterceptor{root: w}
-	i.Next = next
-	return i
-}
-
-type activityInboundLoggerInterceptor struct {
-	interceptor.ActivityInboundInterceptorBase
-	root *loggerInterceptor
-}
-
-func (a *activityInboundLoggerInterceptor) Init(outbound interceptor.ActivityOutboundInterceptor) error {
-	i := &activityOutboundLoggerInterceptor{root: a.root}
-	i.Next = outbound
-	return a.Next.Init(i)
-}
-
-type activityOutboundLoggerInterceptor struct {
-	interceptor.ActivityOutboundInterceptorBase
-	root *loggerInterceptor
-}
-
-func (a *activityOutboundLoggerInterceptor) GetLogger(ctx context.Context) log.Logger {
-	logger := a.Next.GetLogger(ctx)
-	return withFields(logger, getFields(ctx))
-}
-
-func (w *loggerInterceptor) InterceptWorkflow(
-	ctx workflow.Context,
-	next interceptor.WorkflowInboundInterceptor,
-) interceptor.WorkflowInboundInterceptor {
-	i := &workflowInboundLoggerInterceptor{root: w}
-	i.Next = next
-	return i
-}
-
-type workflowInboundLoggerInterceptor struct {
-	interceptor.WorkflowInboundInterceptorBase
-	root *loggerInterceptor
-}
-
-func (w *workflowInboundLoggerInterceptor) Init(outbound interceptor.WorkflowOutboundInterceptor) error {
-	i := &workflowOutboundLoggerInterceptor{root: w.root}
-	i.Next = outbound
-	return w.Next.Init(i)
-}
-
-type workflowOutboundLoggerInterceptor struct {
-	interceptor.WorkflowOutboundInterceptorBase
-	root *loggerInterceptor
-}
-
-func (w *workflowOutboundLoggerInterceptor) GetLogger(ctx workflow.Context) log.Logger {
-	logger := w.Next.GetLogger(ctx)
-	return withFields(logger, getFields(ctx))
 }
 
 type valuer interface {
