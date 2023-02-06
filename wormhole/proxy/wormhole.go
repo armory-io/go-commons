@@ -164,7 +164,7 @@ func (ws *WormholeService) getSessionCredentialsForAgentGroup(ctx context.Contex
 	return sessionCredentials, nil
 }
 
-func (ws *WormholeService) getHttpsProxyUrl(ctx context.Context, agentGroup *AgentGroup) (string, error) {
+func (ws *WormholeService) getProxyURL(ctx context.Context, agentGroup *AgentGroup) (string, error) {
 	sessionCredentials, err := ws.getSessionCredentialsForAgentGroup(ctx, agentGroup)
 	if err != nil {
 		return "", err
@@ -184,16 +184,18 @@ func (ws *WormholeService) getHttpsProxyUrl(ctx context.Context, agentGroup *Age
 		port = ws.SessionOverrides.Port
 	}
 
-	httpsProxyUrl := fmt.Sprintf("socks5://%s:%s@%s:%d", user, password, host, port)
-	return httpsProxyUrl, nil
+	return fmt.Sprintf("socks5://%s:%s@%s:%d", user, password, host, port), nil
 }
 
 func (ws *WormholeService) getProxyConfig(ctx context.Context, agentGroup *AgentGroup) (*httpproxy.Config, error) {
-	httpsProxyUrl, err := ws.getHttpsProxyUrl(ctx, agentGroup)
+	proxyURL, err := ws.getProxyURL(ctx, agentGroup)
 	if err != nil {
 		return nil, err
 	}
-	return &httpproxy.Config{HTTPSProxy: httpsProxyUrl}, nil
+	return &httpproxy.Config{
+		HTTPProxy:  proxyURL,
+		HTTPSProxy: proxyURL,
+	}, nil
 }
 
 func (ws *WormholeService) GetProxyFunction(ctx context.Context, agentGroup *AgentGroup) (func(*http.Request) (*url.URL, error), error) {
