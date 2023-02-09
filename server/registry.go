@@ -18,6 +18,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/armory-io/go-commons/iam"
 	"github.com/armory-io/go-commons/management/info"
@@ -34,10 +35,13 @@ import (
 	"strings"
 )
 
+var ErrDuplicateHandlerRegistered = errors.New("there was a duplicate handler registered")
+
 type (
 	handlerDTOKey struct {
-		path   string
-		method string
+		path     string
+		method   string
+		consumes string
 	}
 
 	handlerDTO struct {
@@ -279,8 +283,9 @@ func configureHandler(handler Handler, controller IController, logger *zap.Sugar
 
 func registerHandler(hDTO *handlerDTO, registryData map[handlerDTOKey]map[string]*handlerDTO) error {
 	key := handlerDTOKey{
-		path:   hDTO.Path,
-		method: hDTO.Method,
+		path:     hDTO.Path,
+		method:   hDTO.Method,
+		consumes: hDTO.Consumes,
 	}
 
 	if registryData[key] == nil {
@@ -288,7 +293,7 @@ func registerHandler(hDTO *handlerDTO, registryData map[handlerDTOKey]map[string
 	}
 
 	if registryData[key][hDTO.Produces] != nil {
-		return fmt.Errorf("failed to register hander for [Path: %s, Method: %s, Produces: %s] there was already a registered handler", hDTO.Path, hDTO.Method, hDTO.Produces)
+		return fmt.Errorf("failed to register handler for [Path: %s, Method: %s, Consumes: %s, Produces: %s] %w", hDTO.Path, hDTO.Method, hDTO.Consumes, hDTO.Produces, ErrDuplicateHandlerRegistered)
 	}
 
 	registryData[key][hDTO.Produces] = hDTO
