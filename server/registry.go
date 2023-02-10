@@ -137,6 +137,7 @@ func createMultiMimeTypeFn(handlersByMimeType map[handlerDTOMimeTypeKey]*handler
 	availableConsumes := lo.Map(values, func(hDTO *handlerDTO, _ int) contenttype.MediaType {
 		return hDTO.ConsumesMediaType
 	})
+
 	return func(c *gin.Context) {
 		accept := c.Request.Header.Get("Accept")
 		if accept == "" {
@@ -155,13 +156,65 @@ func createMultiMimeTypeFn(handlersByMimeType map[handlerDTOMimeTypeKey]*handler
 			handleContentTypesMismatch(c, availableCombinations, c.ContentType(), accept, err, logger)
 			return
 		}
+		// for backward compatibility, we should accept super type of Accept header as a valid Content-Type
+		availableConsumes = append(availableConsumes, getMediaSuperType(amt))
 		cmt, _, err := contenttype.GetAcceptableMediaTypeFromHeader(contentType, availableConsumes)
+		if err != nil {
+			handleContentTypesMismatch(c, availableCombinations, c.ContentType(), accept, err, logger)
+			return
+		}
 		// execute the handler func for the requested MIME type
-		handlersByMimeType[handlerDTOMimeTypeKey{
+		handler := handlersByMimeType[handlerDTOMimeTypeKey{
 			consumes: cmt.MIME(),
 			produces: amt.MIME(),
-		}].HandlerFn(c)
+		}]
+
+		if handler == nil {
+			//If there was no consume/produces match, default to the first matching producer
+			handler = findAcceptableDefaultHandler(values, amt, cmt)
+
+			if handler == nil {
+				handleContentTypesMismatch(c, availableCombinations, c.ContentType(), accept, err, logger)
+				return
+			}
+
+		}
+		handler.HandlerFn(c)
 	}
+}
+
+//findAcceptableDefaultHandler An acceptable match will be a matching produces MediaType and one that has the same consumes Type and a subset of the Subtype
+func findAcceptableDefaultHandler(handlers []*handlerDTO, produces contenttype.MediaType, consumes contenttype.MediaType) *handlerDTO {
+	for _, dto := range handlers {
+		//if a handler matches on `produces`
+		if dto.MediaType.MIME() == produces.MIME() {
+			//and consumes is any, return first result
+			if consumes.MIME() == "*/*" {
+				return dto
+			}
+			//and produces Type matches and has a simplified Subtype match
+			// i.e. `application/json` is provided for consumes, handler has consumes `application/my.specific+json`, it will match
+			if dto.ConsumesMediaType.Type == produces.Type && strings.HasSuffix(dto.ConsumesMediaType.Subtype, "+"+consumes.Subtype) {
+				return dto
+			}
+		}
+	}
+	return nil
+}
+
+func getMediaSuperType(mediaType contenttype.MediaType) contenttype.MediaType {
+	if !strings.Contains(mediaType.Subtype, "+") {
+		return mediaType
+	}
+	split := strings.Split(mediaType.Subtype, "+")
+	if len(split) != 2 {
+		return mediaType
+	}
+	superType, err := contenttype.ParseMediaType(mediaType.Type + "/" + split[1])
+	if err != nil {
+		return mediaType
+	}
+	return superType
 }
 
 func handleContentTypesMismatch(c *gin.Context, availableCombinations []handlerDTOMimeTypeKey, contentType string, accept string, err error, logger *zap.SugaredLogger) {
