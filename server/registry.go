@@ -39,9 +39,13 @@ var ErrDuplicateHandlerRegistered = errors.New("there was a duplicate handler re
 
 type (
 	handlerDTOKey struct {
-		path     string
-		method   string
+		path   string
+		method string
+	}
+
+	handlerDTOMimeTypeKey struct {
 		consumes string
+		produces string
 	}
 
 	handlerDTO struct {
@@ -54,6 +58,7 @@ type (
 		StatusCode         int                   `json:"statusCode"`
 		HandlerFn          gin.HandlerFunc       `json:"-"`
 		MediaType          contenttype.MediaType `json:"-"`
+		ConsumesMediaType  contenttype.MediaType `json:"-"`
 		Default            bool                  `json:"default"`
 		ResponseProcessors []ResponseProcessorFn `json:"-"`
 	}
@@ -62,7 +67,7 @@ type (
 type handlerRegistry struct {
 	name   string
 	logger *zap.SugaredLogger
-	data   map[handlerDTOKey]map[string]*handlerDTO
+	data   map[handlerDTOKey]map[handlerDTOMimeTypeKey]*handlerDTO
 }
 
 type registerHandlersInput struct {
@@ -93,7 +98,7 @@ func (r *handlerRegistry) registerHandlers(in registerHandlersInput) error {
 		authOptOut := maps.Values(handlersByMimeType)[0].AuthOptOut
 
 		// Ensure that all in handlers for the multi-mime type handler have the same auth settings
-		matches := lo.PickBy(handlersByMimeType, func(contentType string, handler *handlerDTO) bool {
+		matches := lo.PickBy(handlersByMimeType, func(mimeTypeKey handlerDTOMimeTypeKey, handler *handlerDTO) bool {
 			return handler.AuthOptOut != authOptOut
 		})
 		if len(matches) > 0 {
@@ -120,7 +125,7 @@ func (r *handlerRegistry) registerHandlers(in registerHandlersInput) error {
 	return nil
 }
 
-func createMultiMimeTypeFn(handlersByMimeType map[string]*handlerDTO, logger *zap.SugaredLogger) gin.HandlerFunc {
+func createMultiMimeTypeFn(handlersByMimeType map[handlerDTOMimeTypeKey]*handlerDTO, logger *zap.SugaredLogger) gin.HandlerFunc {
 	values := maps.Values(handlersByMimeType)
 	// sort available in reverse lexicographical order, so that the newest version is chosen by default when no accept header is present
 	sort.Slice(values, func(i, j int) bool { return values[i].Produces > values[j].Produces })
@@ -129,47 +134,68 @@ func createMultiMimeTypeFn(handlersByMimeType map[string]*handlerDTO, logger *za
 	available := lo.Map(values, func(hDTO *handlerDTO, _ int) contenttype.MediaType {
 		return hDTO.MediaType
 	})
+	availableConsumes := lo.Map(values, func(hDTO *handlerDTO, _ int) contenttype.MediaType {
+		return hDTO.ConsumesMediaType
+	})
 	return func(c *gin.Context) {
 		accept := c.Request.Header.Get("Accept")
 		if accept == "" {
 			accept = "*/*"
 		}
-
+		contentType := c.Request.Header.Get("Content-Type")
+		if contentType == "" {
+			contentType = "*/*"
+		}
+		availableCombinations := lo.Map(values, func(hDTO *handlerDTO, _ int) handlerDTOMimeTypeKey {
+			return handlerDTOMimeTypeKey{hDTO.Consumes, hDTO.Produces}
+		})
 		// TODO add params to context
-		mt, _, err := contenttype.GetAcceptableMediaTypeFromHeader(accept, available)
+		amt, _, err := contenttype.GetAcceptableMediaTypeFromHeader(accept, available)
 		if err != nil {
-			availableMimeTypes := lo.Map(available, func(m contenttype.MediaType, _ int) string {
-				return m.String()
-			})
-			writeAndLogApiErrorThenAbort(c, serr.NewErrorResponseFromApiError(serr.APIError{
-				Message: "Server can not produce requested content type",
-				Metadata: map[string]any{
-					"requested": accept,
-					"available": strings.Join(availableMimeTypes, ", "),
-				},
-				HttpStatusCode: http.StatusBadRequest,
-			},
-				serr.WithCause(err),
-				serr.WithExtraDetailsForLogging(
-					serr.KVPair{
-						Key:   "requested-type",
-						Value: accept,
-					},
-					serr.KVPair{
-						Key:   "available-types",
-						Value: strings.Join(availableMimeTypes, ", "),
-					},
-				)), logger)
+			handleContentTypesMismatch(c, availableCombinations, c.ContentType(), accept, err, logger)
 			return
 		}
-
+		cmt, _, err := contenttype.GetAcceptableMediaTypeFromHeader(contentType, availableConsumes)
 		// execute the handler func for the requested MIME type
-		handlersByMimeType[mt.MIME()].HandlerFn(c)
+		handlersByMimeType[handlerDTOMimeTypeKey{
+			consumes: cmt.MIME(),
+			produces: amt.MIME(),
+		}].HandlerFn(c)
 	}
 }
 
+func handleContentTypesMismatch(c *gin.Context, availableCombinations []handlerDTOMimeTypeKey, contentType string, accept string, err error, logger *zap.SugaredLogger) {
+	availableMimeTypes := lo.Map(availableCombinations, func(m handlerDTOMimeTypeKey, _ int) string {
+		return fmt.Sprintf("[Content-Type: %s, Accept: %s]", m.consumes, m.produces)
+	})
+	writeAndLogApiErrorThenAbort(c, serr.NewErrorResponseFromApiError(serr.APIError{
+		Message: "Server can not produce requested content type for received content type",
+		Metadata: map[string]any{
+			"provided":  contentType,
+			"requested": accept,
+			"available": strings.Join(availableMimeTypes, ", "),
+		},
+		HttpStatusCode: http.StatusBadRequest,
+	},
+		serr.WithCause(err),
+		serr.WithExtraDetailsForLogging(
+			serr.KVPair{
+				Key:   "provided-type",
+				Value: contentType,
+			},
+			serr.KVPair{
+				Key:   "requested-type",
+				Value: accept,
+			},
+			serr.KVPair{
+				Key:   "available-type-combinations",
+				Value: strings.Join(availableMimeTypes, ", "),
+			},
+		)), logger)
+}
+
 func newHandlerRegistry(name string, logger *zap.SugaredLogger, requestValidator *validator.Validate, controllerCollections ...[]IController) (iHandlerRegistry, error) {
-	registryData := make(map[handlerDTOKey]map[string]*handlerDTO)
+	registryData := make(map[handlerDTOKey]map[handlerDTOMimeTypeKey]*handlerDTO)
 	for _, collection := range controllerCollections {
 		for _, c := range collection {
 			for _, h := range c.Handlers() {
@@ -187,7 +213,7 @@ func newHandlerRegistry(name string, logger *zap.SugaredLogger, requestValidator
 	}, nil
 }
 
-func configureHandler(handler Handler, controller IController, logger *zap.SugaredLogger, requestValidator *validator.Validate, registryData map[handlerDTOKey]map[string]*handlerDTO) error {
+func configureHandler(handler Handler, controller IController, logger *zap.SugaredLogger, requestValidator *validator.Validate, registryData map[handlerDTOKey]map[handlerDTOMimeTypeKey]*handlerDTO) error {
 	validators := make([]AuthZValidatorV2Fn, 0)
 	hDTO := &handlerDTO{
 		Path:       strings.TrimSuffix(strings.TrimSpace(handler.Config().Path), "/"),
@@ -268,7 +294,16 @@ func configureHandler(handler Handler, controller IController, logger *zap.Sugar
 			err,
 		)
 	}
+
 	hDTO.MediaType = mt
+	cmt, err := contenttype.ParseMediaType(hDTO.Consumes)
+	if err != nil {
+		return multierr.Append(
+			fmt.Errorf("failed to process mime type (%s) for handler with method: %s, path: %s", hDTO.Consumes, hDTO.Method, hDTO.Path),
+			err,
+		)
+	}
+	hDTO.ConsumesMediaType = cmt
 
 	if hDTO.StatusCode == 0 {
 		hDTO.StatusCode = http.StatusOK
@@ -281,21 +316,25 @@ func configureHandler(handler Handler, controller IController, logger *zap.Sugar
 	return registerHandler(hDTO, registryData)
 }
 
-func registerHandler(hDTO *handlerDTO, registryData map[handlerDTOKey]map[string]*handlerDTO) error {
+func registerHandler(hDTO *handlerDTO, registryData map[handlerDTOKey]map[handlerDTOMimeTypeKey]*handlerDTO) error {
 	key := handlerDTOKey{
-		path:     hDTO.Path,
-		method:   hDTO.Method,
+		path:   hDTO.Path,
+		method: hDTO.Method,
+	}
+
+	mimeTypeKey := handlerDTOMimeTypeKey{
 		consumes: hDTO.Consumes,
+		produces: hDTO.Produces,
 	}
 
 	if registryData[key] == nil {
-		registryData[key] = make(map[string]*handlerDTO)
+		registryData[key] = make(map[handlerDTOMimeTypeKey]*handlerDTO)
 	}
 
-	if registryData[key][hDTO.Produces] != nil {
+	if registryData[key][mimeTypeKey] != nil {
 		return fmt.Errorf("failed to register handler for [Path: %s, Method: %s, Consumes: %s, Produces: %s] %w", hDTO.Path, hDTO.Method, hDTO.Consumes, hDTO.Produces, ErrDuplicateHandlerRegistered)
 	}
 
-	registryData[key][hDTO.Produces] = hDTO
+	registryData[key][mimeTypeKey] = hDTO
 	return nil
 }

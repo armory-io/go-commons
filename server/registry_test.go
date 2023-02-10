@@ -72,7 +72,7 @@ func (p testController) Handlers() []Handler {
 }
 
 func (s *RegistryTestSuite) TestRegisterHandlersWithSameProducesAndConsumesCombination() {
-	registryData := map[handlerDTOKey]map[string]*handlerDTO{}
+	registryData := map[handlerDTOKey]map[handlerDTOMimeTypeKey]*handlerDTO{}
 	for _, handler := range s.controller.Handlers() {
 		err := configureHandler(handler, s.controller, s.log, nil, registryData)
 		s.NoError(err, "all handlers should register")
