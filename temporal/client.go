@@ -26,6 +26,8 @@ type Configuration struct {
 	Port                        string
 	CertPath                    string
 	KeyPath                     string
+	Cert                        string
+	Key                         string
 	TemporalCloudEnabled        bool
 	TemporalCloudAccountID      string
 	ClientSideEncryptionEnabled bool
@@ -96,11 +98,11 @@ func temporalClientOptions(logger *ZapAdapter, params ProviderParameters) (*clie
 }
 
 func validateCloudConfig(config Configuration) error {
-	if config.KeyPath == "" {
-		return fmt.Errorf("no client key path provided")
+	if config.KeyPath == "" && config.Key == "" {
+		return fmt.Errorf("no client key provided")
 	}
-	if config.CertPath == "" {
-		return fmt.Errorf("no client cert path provided")
+	if config.CertPath == "" && config.Cert == "" {
+		return fmt.Errorf("no client cert provided")
 	}
 	if config.ClientSideEncryptionEnabled && config.ClientSideEncryptionCMKARNs == "" {
 		return fmt.Errorf("no cmk arns provided")
@@ -110,7 +112,14 @@ func validateCloudConfig(config Configuration) error {
 
 func temporalCloudClientOptions(logger *ZapAdapter, params ProviderParameters) (*client.Options, error) {
 	config := params.Config
-	clientCertificate, err := tls.LoadX509KeyPair(config.CertPath, config.KeyPath)
+
+	var clientCertificate tls.Certificate
+	var err error
+	if config.Cert != "" && config.Key != "" {
+		clientCertificate, err = tls.X509KeyPair([]byte(config.Cert), []byte(config.Key))
+	} else {
+		clientCertificate, err = tls.LoadX509KeyPair(config.CertPath, config.KeyPath)
+	}
 	if err != nil {
 		return nil, err
 	}
