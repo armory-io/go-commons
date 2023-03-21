@@ -531,7 +531,7 @@ func ginHOF[REQUEST, RESPONSE any](
 			return
 		}
 
-		onHandleResponse(c, response, logger, handler, apiError)
+		onHandleResponse(c, response, logger, handler)
 	}
 }
 
@@ -623,7 +623,7 @@ func onValidateRequest[REQUEST any](c *gin.Context, req *REQUEST, logger *zap.Su
 	return true
 }
 
-func onHandleResponse[RESPONSE any](c *gin.Context, response *Response[RESPONSE], logger *zap.SugaredLogger, handler *handlerDTO, apiError serr.Error) {
+func onHandleResponse[RESPONSE any](c *gin.Context, response *Response[RESPONSE], logger *zap.SugaredLogger, handler *handlerDTO) {
 	var r RESPONSE
 	responseType := reflect.TypeOf(r)
 	if response == nil || reflect.ValueOf(&response.Body).Elem().IsZero() {
@@ -656,7 +656,7 @@ func onHandleResponse[RESPONSE any](c *gin.Context, response *Response[RESPONSE]
 		}
 	}
 
-	apiError = writeResponse(c.Request.Context(), handler.Produces, response.Body, c.Writer, handler.ResponseProcessors)
+	apiError := writeResponse(c.Request.Context(), handler.Produces, response.Body, c.Writer, handler.ResponseProcessors)
 	if apiError != nil {
 		writeAndLogApiErrorThenAbort(c, apiError, logger)
 		return
@@ -966,12 +966,8 @@ func LogAPIError(
 		if statusCode < 400 || statusCode >= 500 {
 			fields = append(fields, "stacktrace", apiErr.Stacktrace())
 		}
-		break
-	case serr.ForceNoStackTrace:
-		break
 	case serr.ForceStackTrace:
 		fields = append(fields, "stacktrace", apiErr.Stacktrace())
-		break
 	}
 
 	if apiErr.Origin() != "" {

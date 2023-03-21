@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"github.com/armory-io/go-commons/iam"
 	"github.com/armory-io/go-commons/logging"
 	"github.com/gin-gonic/gin"
@@ -69,7 +68,7 @@ func NewHandlerTestContext(t *testing.T, target IController, selector HandlerSel
 	}
 
 	if found != 1 {
-		t.Fatal(fmt.Sprintf("found %d handlers, but expected exactly 1", found))
+		t.Fatalf("found %d handlers, but expected exactly 1", found)
 	}
 
 	result.recorder = httptest.NewRecorder()
@@ -163,9 +162,7 @@ func (h *HandlerTestContext) BuildHandler(t *testing.T) (*gin.Context, gin.Handl
 
 	h.ginContext.Request = request
 
-	for _, p := range h.params {
-		h.ginContext.Params = append(h.ginContext.Params, p)
-	}
+	h.ginContext.Params = append(h.ginContext.Params, h.params...)
 
 	if h.principal != nil {
 		ctx := h.ginContext.Request.Context()

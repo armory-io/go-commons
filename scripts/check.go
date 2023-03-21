@@ -91,6 +91,9 @@ func main() {
 	)
 	reportCmd.Stderr = os.Stderr
 	testResults, err := os.Open(fmt.Sprintf("%s/reports/tests-results.json", buildDir))
+	if err != nil {
+		log.Fatal(err)
+	}
 	reportCmd.Stdin = testResults
 	if err = reportCmd.Run(); err != nil {
 		fmt.Printf("Error generating html report, err: %s\n", err.Error())

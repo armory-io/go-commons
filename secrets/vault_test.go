@@ -36,7 +36,6 @@ type MockVaultClient struct {
 	token         string
 	writeResponse *api.Secret
 	writeErr      error
-	readErr       error
 	readWarnings  []string
 	readData      map[string]interface{}
 }

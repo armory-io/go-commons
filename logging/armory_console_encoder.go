@@ -177,16 +177,12 @@ func (c *consoleEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) 
 	switch ent.Level {
 	case zapcore.DebugLevel:
 		lC = color.New(color.FgHiGreen, color.Bold)
-		break
 	case zapcore.InfoLevel:
 		lC = color.New(color.FgHiCyan, color.Bold)
-		break
 	case zapcore.WarnLevel:
 		lC = color.New(color.FgHiYellow, color.Bold)
-		break
 	case zapcore.ErrorLevel, zapcore.DPanicLevel, zapcore.PanicLevel, zapcore.FatalLevel:
 		lC = color.New(color.FgHiRed, color.Bold)
-		break
 	}
 	out.AppendString(lC.Sprintf(ent.Level.CapitalString()))
 
@@ -214,13 +210,10 @@ func (c *consoleEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) 
 	switch ent.Level {
 	case zapcore.DebugLevel:
 		mC = color.New(color.FgHiGreen)
-		break
 	case zapcore.WarnLevel:
 		mC = color.New(color.FgHiYellow)
-		break
 	case zapcore.ErrorLevel, zapcore.DPanicLevel, zapcore.PanicLevel, zapcore.FatalLevel:
 		mC = color.New(color.FgHiRed)
-		break
 	}
 	out.AppendString(tab)
 	out.AppendString(mC.Sprintf(ent.Message))

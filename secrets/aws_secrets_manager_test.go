@@ -17,6 +17,7 @@
 package secrets
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
@@ -114,7 +115,7 @@ func TestNewAwsSecretsManagerDecrypter(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			sut, err := NewAwsSecretsManagerDecrypter(nil, c.isFile, c.params)
+			sut, err := NewAwsSecretsManagerDecrypter(context.Background(), c.isFile, c.params)
 			var errorMsg string
 			if err != nil {
 				errorMsg = err.Error()

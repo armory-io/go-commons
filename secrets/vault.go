@@ -150,56 +150,58 @@ func handleLoginErrors(err error) (string, error) {
 	return "", fmt.Errorf("error logging into vault: %s", err)
 }
 
-func (decrypter *VaultDecrypter) setTokenFetcher() error {
+func (v *VaultDecrypter) setTokenFetcher() error {
 	var tokenFetcher TokenFetcher
 
-	switch decrypter.vaultConfig.AuthMethod {
+	switch v.vaultConfig.AuthMethod {
 	case "TOKEN":
 		tokenFetcher = EnvironmentVariableTokenFetcher{}
 	case "KUBERNETES":
 		tokenFetcher = KubernetesServiceAccountTokenFetcher{
-			role:       decrypter.vaultConfig.Role,
-			path:       decrypter.vaultConfig.Path,
+			role:       v.vaultConfig.Role,
+			path:       v.vaultConfig.Path,
 			fileReader: ioutil.ReadFile,
 		}
 	case "USERPASS":
 		tokenFetcher = UserPassTokenFetcher{
-			username:     decrypter.vaultConfig.Username,
-			password:     decrypter.vaultConfig.Password,
-			userAuthPath: decrypter.vaultConfig.UserAuthPath,
+			username:     v.vaultConfig.Username,
+			password:     v.vaultConfig.Password,
+			userAuthPath: v.vaultConfig.UserAuthPath,
 		}
 	default:
-		return fmt.Errorf("unknown Vault secrets auth method: %q", decrypter.vaultConfig.AuthMethod)
+		return fmt.Errorf("unknown Vault secrets auth method: %q", v.vaultConfig.AuthMethod)
 	}
 
-	decrypter.tokenFetcher = tokenFetcher
+	v.tokenFetcher = tokenFetcher
 	return nil
 }
 
-func (decrypter *VaultDecrypter) Decrypt() (string, error) {
-	if decrypter.vaultConfig.Token == "" {
-		err := decrypter.setToken()
+func (v *VaultDecrypter) Decrypt() (string, error) {
+	if v.vaultConfig.Token == "" {
+		err := v.setToken()
 		if err != nil {
 			return "", err
 		}
 	}
-	client, err := decrypter.getVaultClient()
+	client, err := v.getVaultClient()
 	if err != nil {
 		return "", err
 	}
-	secret, err := decrypter.fetchSecret(client)
+	secret, err := v.fetchSecret(client)
 	if err != nil && strings.Contains(err.Error(), "403") {
 		// get new token and retry in case our saved token is no longer valid
-		err := decrypter.setToken()
+		if err := v.setToken(); err != nil {
+			return "", err
+		}
+		secret, err = v.fetchSecret(client)
 		if err != nil {
 			return "", err
 		}
-		secret, err = decrypter.fetchSecret(client)
 	}
 	if err != nil {
 		return "", err
 	}
-	if decrypter.IsFile() {
+	if v.IsFile() {
 		return ToTempFile([]byte(secret))
 	}
 	return secret, nil
@@ -243,7 +245,7 @@ func validateVaultConfig(vaultConfig VaultConfig) error {
 	if (VaultConfig{}) == vaultConfig {
 		return fmt.Errorf("vault secrets not configured in service profile yaml")
 	}
-	if vaultConfig.Enabled == false {
+	if !vaultConfig.Enabled {
 		return fmt.Errorf("vault secrets disabled")
 	}
 	if vaultConfig.Url == "" {
@@ -276,59 +278,57 @@ func validateVaultConfig(vaultConfig VaultConfig) error {
 	return nil
 }
 
-func (decrypter *VaultDecrypter) setToken() error {
-	client, err := decrypter.getVaultClient()
+func (v *VaultDecrypter) setToken() error {
+	client, err := v.getVaultClient()
 	if err != nil {
 		return err
 	}
-	token, err := decrypter.tokenFetcher.fetchToken(client)
+	token, err := v.tokenFetcher.fetchToken(client)
 	if err != nil {
 		return fmt.Errorf("error fetching vault token - %s", err)
 	}
-	decrypter.vaultConfig.Token = token
+	v.vaultConfig.Token = token
 	return nil
 }
 
-func (decrypter *VaultDecrypter) getVaultClient() (*api.Logical, error) {
-	client, err := decrypter.newAPIClient()
+func (v *VaultDecrypter) getVaultClient() (*api.Logical, error) {
+	client, err := v.newAPIClient()
 	if err != nil {
 		return nil, err
 	}
 	return client.Logical(), nil
 }
 
-func (decrypter *VaultDecrypter) newAPIClient() (*api.Client, error) {
+func (v *VaultDecrypter) newAPIClient() (*api.Client, error) {
 	client, err := api.NewClient(&api.Config{
-		Address: decrypter.vaultConfig.Url,
+		Address: v.vaultConfig.Url,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error fetching vault client: %s", err)
 	}
-	if decrypter.vaultConfig.Namespace != "" {
-		client.SetNamespace(decrypter.vaultConfig.Namespace)
+	if v.vaultConfig.Namespace != "" {
+		client.SetNamespace(v.vaultConfig.Namespace)
 	}
-	if decrypter.vaultConfig.Token != "" {
-		client.SetToken(decrypter.vaultConfig.Token)
+	if v.vaultConfig.Token != "" {
+		client.SetToken(v.vaultConfig.Token)
 	}
 	return client, nil
 }
 
-func (decrypter *VaultDecrypter) fetchSecret(client VaultClient) (string, error) {
-	path := decrypter.engine + "/" + decrypter.path
+func (v *VaultDecrypter) fetchSecret(client VaultClient) (string, error) {
+	path := v.engine + "/" + v.path
 	log.Infof("attempting to read secret at KV v1 path: %s", path)
 	secretMapping, v1err := client.Read(path)
-	if v1err != nil {
-		if _, ok := v1err.(*json.SyntaxError); ok {
-			// some connection errors aren't properly caught, and the vault client tries to parse <nil>
-			return "", fmt.Errorf("error fetching secret from vault - check connection to the server: %s",
-				decrypter.vaultConfig.Url)
-		}
+	if _, ok := v1err.(*json.SyntaxError); ok {
+		// some connection errors aren't properly caught, and the vault client tries to parse <nil>
+		return "", fmt.Errorf("error fetching secret from vault - check connection to the server: %s",
+			v.vaultConfig.Url)
 	}
 
 	var v2err error
 	if containsRetryableError(v1err, secretMapping) {
 		// try again using K/V v2 path
-		path = decrypter.engine + "/data/" + decrypter.path
+		path = v.engine + "/data/" + v.path
 		log.Infof("attempting to read secret at KV v2 path: %s", path)
 		secretMapping, v2err = client.Read(path)
 	}
@@ -340,7 +340,7 @@ func (decrypter *VaultDecrypter) fetchSecret(client VaultClient) (string, error)
 		return "", fmt.Errorf("error fetching secret from vault")
 	}
 
-	return decrypter.parseResults(secretMapping)
+	return v.parseResults(secretMapping)
 }
 
 func containsRetryableError(err error, secret *api.Secret) bool {
@@ -357,9 +357,9 @@ func containsRetryableError(err error, secret *api.Secret) bool {
 	return false
 }
 
-func (decrypter *VaultDecrypter) parseResults(secretMapping *api.Secret) (string, error) {
+func (v *VaultDecrypter) parseResults(secretMapping *api.Secret) (string, error) {
 	if secretMapping == nil {
-		return "", fmt.Errorf("couldn't find vault path %s under engine %s", decrypter.path, decrypter.engine)
+		return "", fmt.Errorf("couldn't find vault path %s under engine %s", v.path, v.engine)
 	}
 
 	mapping := secretMapping.Data
@@ -369,9 +369,9 @@ func (decrypter *VaultDecrypter) parseResults(secretMapping *api.Secret) (string
 		}
 	}
 
-	decrypted, ok := mapping[decrypter.key].(string)
+	decrypted, ok := mapping[v.key].(string)
 	if !ok {
-		return "", fmt.Errorf("key %q not found at engine: %s, path: %s", decrypter.key, decrypter.engine, decrypter.path)
+		return "", fmt.Errorf("key %q not found at engine: %s, path: %s", v.key, v.engine, v.path)
 	}
 	log.Debugf("successfully fetched secret")
 	return decrypted, nil

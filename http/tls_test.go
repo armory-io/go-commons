@@ -17,7 +17,6 @@
 package http
 
 import (
-	"fmt"
 	"github.com/stretchr/testify/assert"
 	"io/ioutil"
 	"os"
@@ -61,13 +60,13 @@ func TestEncryptedKey(t *testing.T) {
 }
 
 func TestFileReadable(t *testing.T) {
-	err := CheckFileExists(fmt.Sprintf("encrypted:noop!asdf"))
+	err := CheckFileExists("encrypted:noop!asdf")
 	if !assert.NotNil(t, err) {
 		return
 	}
 	assert.Equal(t, "no file referenced, use encryptedFile", err.Error())
 
-	err = CheckFileExists(fmt.Sprintf("encryptedFile:noop!asdf"))
+	err = CheckFileExists("encryptedFile:noop!asdf")
 	if !assert.Nil(t, err) {
 		return
 	}

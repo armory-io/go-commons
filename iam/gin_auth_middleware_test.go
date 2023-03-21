@@ -111,8 +111,7 @@ func TestGinPrincipalMiddleware(test *testing.T) {
 				JwtFetcher: c.fetcher,
 			}
 
-			allowList := []string{}
-			allowList = append(c.allow)
+			allowList := c.allow
 
 			g := gin.Default()
 

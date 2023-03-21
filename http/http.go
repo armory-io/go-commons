@@ -127,9 +127,6 @@ func (s *Server) startTls(router http.Handler) error {
 		tlsConfig.ClientAuth = certMode
 	}
 
-	// Discover the server name based on given certificates
-	tlsConfig.BuildNameToCertificate()
-
 	// Create a Server instance to listen on port 8443 with the TLS config
 	s.server = &http.Server{
 		Addr:      s.config.GetAddr(),
