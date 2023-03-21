@@ -101,12 +101,11 @@ func WithBaseConfigurationNames(baseNames ...string) Option {
 func WithExplicitProperties[T string | map[string]any](properties ...T) Option {
 	return func(resolver *resolver) {
 		for _, propertySource := range properties {
-			pAny := any(propertySource)
-			switch pAny.(type) {
+			switch pAny := any(propertySource).(type) {
 			case map[string]any:
-				resolver.explicitProperties = maputils.MergeSources(resolver.explicitProperties, pAny.(map[string]any))
+				resolver.explicitProperties = maputils.MergeSources(resolver.explicitProperties, pAny)
 			case string:
-				kvPair := strings.SplitN(pAny.(string), "=", 2)
+				kvPair := strings.SplitN(pAny, "=", 2)
 				rawKey := kvPair[0]
 				value := kvPair[1]
 				key := strings.Split(rawKey, ".")

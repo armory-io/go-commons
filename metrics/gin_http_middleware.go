@@ -46,6 +46,6 @@ func GinHTTPMiddleware(metrics MetricsSvc) gin.HandlerFunc {
 			"outcome": outcome,
 		}
 
-		metrics.TimerWithTags("http.server.requests", tags).Record(time.Now().Sub(start))
+		metrics.TimerWithTags("http.server.requests", tags).Record(time.Since(start))
 	}
 }

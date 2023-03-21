@@ -133,6 +133,7 @@ func Example_Handler() {
 
 func Example_New1ArgHandler() {
 	// single parameter from path
+	//lint:ignore U1000 Handler example
 	type theThingPathParams struct {
 		ResourceID   string `validate:"uuid-type,max=36"` // note the capitalization in resource name - required for json unmarshalling, validation is optional
 		ResourceType string
@@ -154,6 +155,7 @@ func Example_New1ArgHandler() {
 
 func Example_New3ArgHandler() {
 	//  parameters from path and from headers, as well as currently logged principal
+	//lint:ignore U1000 Handler example
 	type theThingPathParams struct {
 		ResourceID   string `validate:"uuid-type,max=36"` // note the capitalization in resource name - required for json unmarshalling, validation is optional
 		ResourceType string
@@ -162,6 +164,7 @@ func Example_New3ArgHandler() {
 	// required method to tell the handler where to look for parameter's values (can't be defined inline)
 	// func (theThingPathParams) Source() server.ArgumentDataSource { return server.PathContextSource }
 
+	//lint:ignore U1000 Handler example
 	type keyHeaderParams struct {
 		LicenseKeyHeader []string `mapstructure:"x-key-id" validate:"required,max=1,dive,required"` // tells to look for header in x-key-id header as well as enforces that one value of the header is provided
 	}
@@ -184,10 +187,10 @@ func Example_New3ArgHandler() {
 
 const (
 	voidArgumentSource  ArgumentDataSource = -1
-	PathContextSource                      = 0
-	QueryContextSource                     = 1
-	HeaderContextSource                    = 2
-	authContextSource                      = 200
+	PathContextSource   ArgumentDataSource = 0
+	QueryContextSource  ArgumentDataSource = 1
+	HeaderContextSource ArgumentDataSource = 2
+	authContextSource   ArgumentDataSource = 200
 )
 
 func (r *handler[REQUEST, RESPONSE]) Config() HandlerConfig {

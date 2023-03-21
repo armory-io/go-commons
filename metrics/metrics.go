@@ -23,7 +23,6 @@ import (
 	"github.com/armory-io/go-commons/metadata"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/sirupsen/logrus"
 	"github.com/uber-go/tally/v4"
 	tallyprom "github.com/uber-go/tally/v4/prometheus"
 	"go.uber.org/fx"
@@ -54,7 +53,6 @@ var (
 )
 
 type Metrics struct {
-	log       *logrus.Logger
 	rootScope tally.Scope
 }
 

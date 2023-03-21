@@ -72,7 +72,6 @@ func addClientOptions(cfg *tls.Config, s *ClientTLSSettings) error {
 		return fmt.Errorf("error with certificate file %s: %w", s.ClientCertFile, err)
 	}
 	cfg.Certificates = []tls.Certificate{cert}
-	cfg.PreferServerCipherSuites = true
 	cfg.MinVersion = tls.VersionTLS12
 	return nil
 }
@@ -131,6 +130,9 @@ func GetX509KeyPair(certFile, keyFile, keyPassword string) (tls.Certificate, err
 	}
 
 	pemBlocks, pkey, err := readAndDecryptPEM(b, keyPassword)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
 
 	// If private key not in the cert file, we look for it in the key file
 	if pkey == nil {
@@ -168,11 +170,13 @@ func readAndDecryptPEM(data []byte, keyPassword string) ([]*pem.Block, []byte, e
 			break
 		}
 		if v.Type == "RSA PRIVATE KEY" {
+			//lint:ignore SA1019 TODO(CDAAS-2212)
 			if x509.IsEncryptedPEMBlock(v) {
 				pass, err := getKeyPassword(keyPassword)
 				if err != nil {
 					return nil, nil, err
 				}
+				//lint:ignore SA1019 TODO(CDAAS-2212)
 				pkey, _ = x509.DecryptPEMBlock(v, []byte(pass))
 				pkey = pem.EncodeToMemory(&pem.Block{
 					Type:  v.Type,

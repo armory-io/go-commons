@@ -899,7 +899,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 		})
 		handlerFn(c)
 		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
-		assert.Equal(t, "!dlrow olleh", string(recorder.Body.Bytes()))
+		assert.Equal(t, "!dlrow olleh", recorder.Body.String())
 	})
 
 	s.T().Run("handler will work with response processor for text based handlers", func(t *testing.T) {
@@ -936,7 +936,7 @@ func (s *ServerTestSuite) TestGinHOF() {
 		})
 		handlerFn(c)
 		assert.Equal(t, http.StatusOK, recorder.Result().StatusCode)
-		assert.Equal(t, "hello world!", string(recorder.Body.Bytes()))
+		assert.Equal(t, "hello world!", recorder.Body.String())
 	})
 
 	s.T().Run("handler will work with response processor for JSON based handlers", func(t *testing.T) {

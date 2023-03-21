@@ -277,8 +277,7 @@ func configureHandler(handler Handler, controller IController, logger *zap.Sugar
 	}
 
 	if handler.Config().AuthZValidator != nil {
-		var simpleHandler AuthZValidatorV2Fn
-		simpleHandler = func(c context.Context, p *iam.ArmoryCloudPrincipal) (string, bool) {
+		simpleHandler := func(c context.Context, p *iam.ArmoryCloudPrincipal) (string, bool) {
 			return handler.Config().AuthZValidator(p)
 		}
 		validators = append(validators, simpleHandler)
@@ -298,9 +297,7 @@ func configureHandler(handler Handler, controller IController, logger *zap.Sugar
 
 	// Prepend the controller validator if defined, so that the controller validator is called first.
 	if c, ok := controller.(IControllerAuthZValidator); ok {
-		var simpleHandler AuthZValidatorV2Fn
-
-		simpleHandler = func(ctx context.Context, p *iam.ArmoryCloudPrincipal) (string, bool) {
+		simpleHandler := func(ctx context.Context, p *iam.ArmoryCloudPrincipal) (string, bool) {
 			return c.AuthZValidator(p)
 		}
 		validators = append(validators, simpleHandler)

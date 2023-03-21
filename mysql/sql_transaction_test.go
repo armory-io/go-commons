@@ -65,8 +65,10 @@ func TestSqlTransaction(t *testing.T) {
 				txScopeWrapper, err := txScopeBuilder(context.TODO(), sql.LevelReadCommitted)
 				assert.NilError(t, err)
 				err = txScopeWrapper(func(ctx context.Context, db boil.ContextExecutor) error {
-					_, err := db.Exec("insert into cars(idx, name, price) values (5, 'bentley', 99999)")
-					_, err = db.Exec("insert into cars(idx, name, price) values (5, 'bugatti', 99999)")
+					if _, err := db.Exec("insert into cars(idx, name, price) values (5, 'bentley', 99999)"); err != nil {
+						return err
+					}
+					_, err := db.Exec("insert into cars(idx, name, price) values (5, 'bugatti', 99999)")
 					return err
 				})
 				_, isMySqlError := err.(*mysql.MySQLError)
@@ -107,7 +109,7 @@ func TestSqlTransaction(t *testing.T) {
 
 				go func() {
 					err = txScopeWrapperRead(func(ctx context.Context, db boil.ContextExecutor) error {
-						_ = <-sync
+						<-sync
 						row := db.QueryRow("select count(idx) from cars where name = 'seat'")
 						assert.NilError(t, row.Err())
 						var cnt int
@@ -127,7 +129,7 @@ func TestSqlTransaction(t *testing.T) {
 						_, err := db.Exec("insert into cars(idx, name, price) values (8, 'seat', 1000)")
 						sync <- true
 						time.Sleep(time.Second)
-						_ = <-sync
+						<-sync
 						logrus.Warn("write scope complete!")
 						return err
 					})
