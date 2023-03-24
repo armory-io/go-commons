@@ -134,9 +134,6 @@ func createMultiMimeTypeFn(handlersByMimeType map[handlerDTOMimeTypeKey]*handler
 	available := lo.Map(values, func(hDTO *handlerDTO, _ int) contenttype.MediaType {
 		return hDTO.MediaType
 	})
-	availableConsumes := lo.Map(values, func(hDTO *handlerDTO, _ int) contenttype.MediaType {
-		return hDTO.ConsumesMediaType
-	})
 
 	return func(c *gin.Context) {
 		accept := c.Request.Header.Get("Accept")
@@ -147,6 +144,8 @@ func createMultiMimeTypeFn(handlersByMimeType map[handlerDTOMimeTypeKey]*handler
 		if contentType == "" {
 			contentType = "*/*"
 		}
+		// get rid of extra annotations - i.e. ;charset=utf-8 or ;boundary=----
+		contentType = strings.Split(contentType, ";")[0]
 		availableCombinations := lo.Map(values, func(hDTO *handlerDTO, _ int) handlerDTOMimeTypeKey {
 			return handlerDTOMimeTypeKey{hDTO.Consumes, hDTO.Produces}
 		})
@@ -157,7 +156,10 @@ func createMultiMimeTypeFn(handlersByMimeType map[handlerDTOMimeTypeKey]*handler
 			return
 		}
 		// for backward compatibility, we should accept super type of Accept header as a valid Content-Type
-		availableConsumes = append(availableConsumes, getMediaSuperType(amt))
+		availableConsumes := append(lo.Map(values, func(hDTO *handlerDTO, _ int) contenttype.MediaType {
+			return hDTO.ConsumesMediaType
+		}), getMediaSuperType(amt))
+
 		cmt, _, err := contenttype.GetAcceptableMediaTypeFromHeader(contentType, availableConsumes)
 		if err != nil {
 			handleContentTypesMismatch(c, availableCombinations, c.ContentType(), accept, err, logger)
@@ -183,7 +185,7 @@ func createMultiMimeTypeFn(handlersByMimeType map[handlerDTOMimeTypeKey]*handler
 	}
 }
 
-//findAcceptableDefaultHandler An acceptable match will be a matching produces MediaType and one that has the same consumes Type and a subset of the Subtype
+// findAcceptableDefaultHandler An acceptable match will be a matching produces MediaType and one that has the same consumes Type and a subset of the Subtype
 func findAcceptableDefaultHandler(handlers []*handlerDTO, produces contenttype.MediaType, consumes contenttype.MediaType) *handlerDTO {
 	for _, dto := range handlers {
 		//if a handler matches on `produces`
