@@ -23,17 +23,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/hashicorp/go-cleanhttp"
 	"github.com/hashicorp/go-retryablehttp"
 	"go.uber.org/zap"
 	"golang.org/x/net/http/httpproxy"
 	"io"
 	"k8s.io/client-go/rest"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -43,18 +40,17 @@ var (
 	ErrCredentialFetchNotSupportedByAgent = errors.New("agent does not support credentials fetching")
 )
 
-func NewWithLogger(baseURL string, overrides *SessionOverrides, tokenSupplier tokenSupplier, log *zap.SugaredLogger) *WormholeService {
-	return new(baseURL, overrides, tokenSupplier, &logAdapter{SugaredLogger: log})
+type WormholeServiceParameters struct {
+	Client    *http.Client
+	BaseURL   string
+	Overrides *SessionOverrides
+	Logger    *zap.SugaredLogger
 }
 
-func New(baseURL string, overrides *SessionOverrides, tokenSupplier tokenSupplier) *WormholeService {
-	return new(baseURL, overrides, tokenSupplier, log.New(os.Stderr, "", log.LstdFlags))
-}
-
-func new(baseURL string, overrides *SessionOverrides, tokenSupplier tokenSupplier, log retryablehttp.Logger) *WormholeService {
-	client := &retryablehttp.Client{
-		HTTPClient:   cleanhttp.DefaultClient(),
-		Logger:       log,
+func New(params WormholeServiceParameters) *WormholeService {
+	rc := &retryablehttp.Client{
+		HTTPClient:   params.Client,
+		Logger:       &logAdapter{SugaredLogger: params.Logger},
 		RetryWaitMin: 0,
 		RetryWaitMax: 0,
 		RetryMax:     20,
@@ -62,18 +58,14 @@ func new(baseURL string, overrides *SessionOverrides, tokenSupplier tokenSupplie
 		Backoff:      retryablehttp.DefaultBackoff,
 	}
 	return &WormholeService{
-		WormholeBaseUrl:  baseURL,
-		TokenSupplier:    tokenSupplier,
-		SessionOverrides: overrides,
-		client:           client.StandardClient(),
+		WormholeBaseURL:  params.BaseURL,
+		SessionOverrides: params.Overrides,
+		client:           rc.StandardClient(),
 	}
 }
 
-type tokenSupplier func() (string, error)
-
 type WormholeService struct {
-	WormholeBaseUrl  string
-	TokenSupplier    tokenSupplier
+	WormholeBaseURL  string
 	SessionOverrides *SessionOverrides
 	client           *http.Client
 }
@@ -126,17 +118,11 @@ func (ws *WormholeService) getSessionCredentialsForAgentGroup(ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ws.WormholeBaseUrl+"/internal/auth/session", bytes.NewBuffer(agentGroupJson))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ws.WormholeBaseURL+"/internal/auth/session", bytes.NewBuffer(agentGroupJson))
 	if err != nil {
 		return nil, err
 	}
 
-	token, err := ws.TokenSupplier()
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Accept", "application/json")
 
@@ -221,17 +207,11 @@ func (ws *WormholeService) GetKubernetesClusterCredentialsFromAgent(ctx context.
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ws.WormholeBaseUrl+"/internal/auth/kubernetes-cluster-credentials-for-agent", bytes.NewBuffer(agentGroupJson))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ws.WormholeBaseURL+"/internal/auth/kubernetes-cluster-credentials-for-agent", bytes.NewBuffer(agentGroupJson))
 	if err != nil {
 		return nil, err
 	}
 
-	token, err := ws.TokenSupplier()
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Accept", "application/json")
 
@@ -310,16 +290,11 @@ func (ws *WormholeService) ListAgents(ctx context.Context, orgID, envID string) 
 		return nil, fmt.Errorf("must provide orgID and envID")
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ws.WormholeBaseUrl+fmt.Sprintf("/internal/agent-metadata?orgId=%s&envId=%s", orgID, envID), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ws.WormholeBaseURL+fmt.Sprintf("/internal/agent-metadata?orgId=%s&envId=%s", orgID, envID), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	token, err := ws.TokenSupplier()
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
 	req.Header.Add("Accept", "application/json")
 
 	res, err := ws.client.Do(req)

@@ -1,17 +1,17 @@
 package temporal
 
 import (
-	"github.com/armory-io/go-commons/tracing"
+	"github.com/armory-io/go-commons/opentelemetry"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 )
 
 type WorkerProvider struct {
-	tracing tracing.Configuration
+	tracing opentelemetry.Configuration
 }
 
-func WorkerProviderProvider(tracingConfig tracing.Configuration) WorkerProvider {
+func WorkerProviderProvider(tracingConfig opentelemetry.Configuration) WorkerProvider {
 	return WorkerProvider{tracing: tracingConfig}
 }
 

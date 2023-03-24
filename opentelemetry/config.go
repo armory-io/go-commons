@@ -14,16 +14,22 @@
  * limitations under the License.
  */
 
-package tracing
+package opentelemetry
 
 import (
 	"context"
+	"fmt"
 	"github.com/armory-io/go-commons/metadata"
 	"github.com/go-logr/zapr"
+	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/metric/global"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
@@ -31,16 +37,23 @@ import (
 	"go.uber.org/zap"
 )
 
-type PushConfiguration struct {
-	Enabled  bool
-	Endpoint string
-	APIKey   string
-	Insecure bool
-}
+type (
+	PushConfiguration struct {
+		Enabled  bool
+		Endpoint string
+		APIKey   string
+		Insecure bool
+	}
 
-type Configuration struct {
-	Push PushConfiguration
-}
+	Configuration struct {
+		SampleRate float64
+		Push       PushConfiguration
+	}
+)
+
+var (
+	ErrInvalidConfiguration = errors.New("invalid tracing configuration")
+)
 
 func InitTracing(
 	ctx context.Context,
@@ -49,6 +62,10 @@ func InitTracing(
 	app metadata.ApplicationMetadata,
 	config Configuration,
 ) error {
+	if config.SampleRate < 0 || config.SampleRate > 1 {
+		return fmt.Errorf("%w: sample rate must be between 0 and 1, got %f", ErrInvalidConfiguration, config.SampleRate)
+	}
+
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
 			semconv.ServiceNameKey.String(app.Name),
@@ -63,7 +80,7 @@ func InitTracing(
 	}
 
 	tracingOpts := []sdktrace.TracerProviderOption{
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(config.SampleRate))),
 		sdktrace.WithResource(res),
 	}
 
@@ -106,6 +123,26 @@ func InitTracing(
 	return nil
 }
 
+func MeterProviderProvider(lc fx.Lifecycle) (*metric.MeterProvider, error) {
+	exporter, err := otelprom.New(
+		otelprom.WithRegisterer(prometheus.DefaultRegisterer),
+	)
+	if err != nil {
+		return nil, err
+	}
+	provider := metric.NewMeterProvider(metric.WithReader(exporter))
+	global.SetMeterProvider(provider)
+
+	lc.Append(fx.Hook{
+		OnStop: func(ctx context.Context) error {
+			return provider.Shutdown(ctx)
+		},
+	})
+
+	return provider, nil
+}
+
 var Module = fx.Options(
 	fx.Invoke(InitTracing),
+	fx.Provide(MeterProviderProvider),
 )

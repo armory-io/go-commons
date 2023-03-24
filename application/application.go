@@ -19,6 +19,7 @@ package application
 import (
 	"github.com/armory-io/go-commons/gin"
 	armoryhttp "github.com/armory-io/go-commons/http"
+	"github.com/armory-io/go-commons/http/client"
 	"github.com/armory-io/go-commons/iam"
 	"github.com/armory-io/go-commons/logging"
 	"github.com/armory-io/go-commons/management"
@@ -26,8 +27,8 @@ import (
 	"github.com/armory-io/go-commons/metadata"
 	"github.com/armory-io/go-commons/metrics"
 	"github.com/armory-io/go-commons/mysql"
+	"github.com/armory-io/go-commons/opentelemetry"
 	"github.com/armory-io/go-commons/server"
-	"github.com/armory-io/go-commons/tracing"
 	"go.uber.org/fx"
 )
 
@@ -57,7 +58,8 @@ var ModuleV2 = fx.Options(
 	metadata.Module,
 	server.Module,
 	management.Module,
-	tracing.Module,
+	opentelemetry.Module,
+	client.Module,
 	fx.Provide(
 		metrics.NewSvc,
 		iam.New,

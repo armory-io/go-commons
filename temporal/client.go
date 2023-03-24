@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"github.com/armory-io/go-commons/metrics"
-	"github.com/armory-io/go-commons/tracing"
+	"github.com/armory-io/go-commons/opentelemetry"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/interceptor"
@@ -44,7 +44,7 @@ type ProviderParameters struct {
 	Logger         *zap.SugaredLogger
 	Config         Configuration
 	MetricsService metrics.MetricsSvc
-	Tracing        tracing.Configuration `optional:"true"`
+	Tracing        opentelemetry.Configuration `optional:"true"`
 }
 
 func ClientProvider(params ProviderParameters) (client.Client, error) {
