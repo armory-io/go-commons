@@ -279,6 +279,9 @@ func (s *ContentTypesTestSuite) SetupSuite() {
 		resp, err := s.client.Do(req)
 		return err == nil && resp != nil && resp.StatusCode == http.StatusOK
 	})
+	if err != nil {
+		s.T().Fail()
+	}
 }
 
 func (s *ContentTypesTestSuite) TearDownSuite() {
