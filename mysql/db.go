@@ -24,21 +24,34 @@ import (
 	"github.com/armory-io/go-commons/opentelemetry"
 	"go.opentelemetry.io/otel/sdk/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.18.0"
+	"go.uber.org/fx"
 )
 
+type Parameters struct {
+	fx.In
+
+	Configuration Configuration
+	Tracing       opentelemetry.Configuration
+	MeterProvider *metric.MeterProvider `optional:"true"`
+}
+
 func New(
-	settings Configuration,
-	tracing opentelemetry.Configuration,
-	mp *metric.MeterProvider,
+	params Parameters,
 ) (*sql.DB, error) {
-	conn, err := settings.ConnectionUrl(false)
+	config := params.Configuration
+	tracing := params.Tracing
+	meterProvider := params.MeterProvider
+
+	conn, err := config.ConnectionUrl(false)
 	if err != nil {
 		return nil, err
 	}
 
-	options := []otelsql.Option{
-		otelsql.WithMeterProvider(mp),
+	var options []otelsql.Option
+	if meterProvider != nil {
+		options = append(options, otelsql.WithMeterProvider(meterProvider))
 	}
+
 	if tracing.Push.Enabled {
 		options = append(options,
 			otelsql.WithSpanNameFormatter(spanNameFormatter{}),
@@ -54,9 +67,9 @@ func New(
 		return nil, err
 	}
 
-	db.SetConnMaxLifetime(settings.MaxLifetime.Duration)
-	db.SetMaxOpenConns(settings.MaxOpenConnections)
-	db.SetMaxIdleConns(settings.MaxIdleConnections)
+	db.SetConnMaxLifetime(config.MaxLifetime.Duration)
+	db.SetMaxOpenConns(config.MaxOpenConnections)
+	db.SetMaxIdleConns(config.MaxIdleConnections)
 	return db, nil
 }
 
