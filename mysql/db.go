@@ -17,24 +17,39 @@
 package mysql
 
 import (
+	"context"
 	"database/sql"
+	"fmt"
 	"github.com/XSAM/otelsql"
-	"github.com/armory-io/go-commons/tracing"
+	"github.com/armory-io/go-commons/opentelemetry"
+	"go.opentelemetry.io/otel/sdk/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.18.0"
 )
 
-func New(settings Configuration, tracing tracing.Configuration) (*sql.DB, error) {
+func New(
+	settings Configuration,
+	tracing opentelemetry.Configuration,
+	mp *metric.MeterProvider,
+) (*sql.DB, error) {
 	conn, err := settings.ConnectionUrl(false)
 	if err != nil {
 		return nil, err
 	}
 
-	var db *sql.DB
+	options := []otelsql.Option{
+		otelsql.WithMeterProvider(mp),
+	}
 	if tracing.Push.Enabled {
-		db, err = otelsql.Open("mysql", conn, otelsql.WithSpanOptions(otelsql.SpanOptions{DisableErrSkip: true}))
-	} else {
-		db, err = sql.Open("mysql", conn)
+		options = append(options,
+			otelsql.WithSpanNameFormatter(spanNameFormatter{}),
+			otelsql.WithSpanOptions(otelsql.SpanOptions{DisableErrSkip: true}),
+			otelsql.WithAttributes(
+				semconv.DBSystemMySQL,
+			),
+		)
 	}
 
+	db, err := otelsql.Open("mysql", conn, options...)
 	if err != nil {
 		return nil, err
 	}
@@ -43,4 +58,18 @@ func New(settings Configuration, tracing tracing.Configuration) (*sql.DB, error)
 	db.SetMaxOpenConns(settings.MaxOpenConnections)
 	db.SetMaxIdleConns(settings.MaxIdleConnections)
 	return db, nil
+}
+
+type spanNameFormatter struct {
+}
+
+func (f spanNameFormatter) Format(ctx context.Context, method otelsql.Method, query string) string {
+	return fmt.Sprintf("%s.%s", method, firstN(query, 100))
+}
+
+func firstN(s string, n int) string {
+	if len(s) > n {
+		return s[:n]
+	}
+	return s
 }
