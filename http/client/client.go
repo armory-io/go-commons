@@ -1,13 +1,13 @@
 package client
 
 import (
-	"github.com/armory-io/go-commons/iam/token"
+	"fmt"
+	"github.com/armory-io/go-commons/oidc"
 	"github.com/armory-io/go-commons/opentelemetry"
 	"github.com/hashicorp/go-cleanhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/propagation"
 	"go.uber.org/fx"
-	"go.uber.org/zap"
 	"net/http"
 )
 
@@ -19,14 +19,22 @@ type (
 	AuthenticatedClientParameters struct {
 		fx.In
 
-		Log      *zap.SugaredLogger
-		Identity token.Identity
+		Identity *oidc.AccessTokenSupplier
 		Tracing  opentelemetry.Configuration `optional:"true"`
+	}
+
+	bearerTokenRoundTripper struct {
+		base          http.RoundTripper
+		tokenSupplier tokenSupplier
+	}
+
+	tokenSupplier interface {
+		GetToken() (string, error)
 	}
 )
 
 // NewRoundTripper creates an http.RoundTripper that propagates OpenTelemetry trace headers.
-func NewRoundTripper(params Parameters) (http.RoundTripper, error) {
+func NewRoundTripper(params Parameters) http.RoundTripper {
 	base := cleanhttp.DefaultTransport()
 
 	if params.Tracing.Push.Enabled {
@@ -38,33 +46,38 @@ func NewRoundTripper(params Parameters) (http.RoundTripper, error) {
 					propagation.Baggage{},
 				),
 			),
-		), nil
+		)
 	}
 
-	return base, nil
+	return base
 }
 
 // NewHTTPClient creates an http.Client that propagates OpenTelemetry trace headers.
-func NewHTTPClient(params Parameters) (*http.Client, error) {
-	rt, err := NewRoundTripper(params)
-	if err != nil {
-		return nil, err
-	}
-
+func NewHTTPClient(params Parameters) *http.Client {
+	rt := NewRoundTripper(params)
 	c := cleanhttp.DefaultClient()
 	c.Transport = rt
-
-	return c, nil
+	return c
 }
 
 // NewAuthenticatedHTTPClient creates an http.Client that propagates OpenTelemetry trace headers and authenticates its requests
 // with a bearer token header.
-func NewAuthenticatedHTTPClient(params AuthenticatedClientParameters) (*http.Client, error) {
-	c, err := NewHTTPClient(Parameters{Tracing: params.Tracing})
+func NewAuthenticatedHTTPClient(params AuthenticatedClientParameters) *http.Client {
+	c := NewHTTPClient(Parameters{Tracing: params.Tracing})
+
+	c.Transport = &bearerTokenRoundTripper{
+		tokenSupplier: params.Identity,
+		base:          c.Transport,
+	}
+	return c
+}
+
+func (b *bearerTokenRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	token, err := b.tokenSupplier.GetToken()
 	if err != nil {
 		return nil, err
 	}
 
-	c.Transport = token.GetTokenWrapper(c.Transport, params.Identity, params.Log)
-	return c, nil
+	request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
+	return b.base.RoundTrip(request)
 }
