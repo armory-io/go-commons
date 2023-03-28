@@ -23,31 +23,43 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
-type accessTokenResponse struct {
-	AccessToken string `json:"access_token"`
-	TokenType   string `json:"token_type"`
-	ExpiresIn   int32  `json:"expires_in"`
-}
+type (
+	accessTokenResponse struct {
+		AccessToken string `json:"access_token"`
+		TokenType   string `json:"token_type"`
+		ExpiresIn   int32  `json:"expires_in"`
+	}
 
-type AccessToken struct {
-	AccessToken string
-	TokenType   string
-	expiresAt   time.Time
-}
+	AccessToken struct {
+		AccessToken string
+		TokenType   string
+		expiresAt   time.Time
+	}
 
-type AccessTokenSupplierConfig struct {
-	ClientId       string
-	ClientSecret   string
-	TokenIssuerUrl string
-	Audience       string
-}
+	AccessTokenSupplierConfig struct {
+		ClientID       string
+		ClientSecret   string
+		TokenIssuerURL string
+		Audience       string
+	}
 
-type AccessTokenSupplier struct {
-	accessToken *AccessToken
-	Config      *AccessTokenSupplierConfig
+	AccessTokenSupplier struct {
+		// mu protects access to accessToken.
+		mu          *sync.Mutex
+		accessToken *AccessToken
+		config      AccessTokenSupplierConfig
+	}
+)
+
+func NewAccessTokenSupplier(config AccessTokenSupplierConfig) *AccessTokenSupplier {
+	return &AccessTokenSupplier{
+		mu:     &sync.Mutex{},
+		config: config,
+	}
 }
 
 func (s *AccessTokenSupplier) GetRawTokenValue() (string, error) {
@@ -56,6 +68,11 @@ func (s *AccessTokenSupplier) GetRawTokenValue() (string, error) {
 		return "", err
 	}
 	return token.AccessToken, nil
+}
+
+// GetToken is an alias for GetRawTokenValue.
+func (s *AccessTokenSupplier) GetToken() (string, error) {
+	return s.GetRawTokenValue()
 }
 
 func (s *AccessTokenSupplier) GetAuthorizationHeaderValue() (string, error) {
@@ -67,12 +84,15 @@ func (s *AccessTokenSupplier) GetAuthorizationHeaderValue() (string, error) {
 }
 
 func (s *AccessTokenSupplier) getAccessToken() (*AccessToken, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.accessToken == nil || time.Now().After(s.accessToken.expiresAt) {
-		aT, err := s.fetchNewAccessToken()
+		token, err := s.fetchNewAccessToken()
 		if err != nil {
 			return nil, err
 		}
-		s.accessToken = aT
+		s.accessToken = token
 	}
 	return s.accessToken, nil
 }
@@ -80,10 +100,10 @@ func (s *AccessTokenSupplier) getAccessToken() (*AccessToken, error) {
 func (s *AccessTokenSupplier) fetchNewAccessToken() (*AccessToken, error) {
 	data := url.Values{}
 	data.Set("grant_type", "client_credentials")
-	data.Set("client_id", s.Config.ClientId)
-	data.Set("client_secret", s.Config.ClientSecret)
-	data.Set("audience", s.Config.Audience)
-	req, err := http.NewRequest(http.MethodPost, s.Config.TokenIssuerUrl, strings.NewReader(data.Encode()))
+	data.Set("client_id", s.config.ClientID)
+	data.Set("client_secret", s.config.ClientSecret)
+	data.Set("audience", s.config.Audience)
+	req, err := http.NewRequest(http.MethodPost, s.config.TokenIssuerURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, err
 	}
@@ -99,8 +119,7 @@ func (s *AccessTokenSupplier) fetchNewAccessToken() (*AccessToken, error) {
 		return nil, fmt.Errorf("unexpected status code while getting token %d", res.StatusCode)
 	}
 	var accessTokenResponse *accessTokenResponse
-	err = json.NewDecoder(res.Body).Decode(&accessTokenResponse)
-	if err != nil {
+	if err := json.NewDecoder(res.Body).Decode(&accessTokenResponse); err != nil {
 		return nil, err
 	}
 
