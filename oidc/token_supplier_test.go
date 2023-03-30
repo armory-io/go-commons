@@ -1,6 +1,7 @@
 package oidc
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/stretchr/testify/assert"
 	"net/http"
@@ -17,14 +18,16 @@ func TestAccessTokenSupplier(t *testing.T) {
 		}))
 	}))
 
-	supplier := NewAccessTokenSupplier(AccessTokenSupplierConfig{
-		ClientID:       "id",
-		ClientSecret:   "secret",
-		TokenIssuerURL: oidcServer.URL,
-		Audience:       "audience",
+	supplier := NewAccessTokenSupplier(AccessTokenSupplierParameters{
+		Config: AccessTokenSupplierConfig{
+			ClientID:       "id",
+			ClientSecret:   "secret",
+			TokenIssuerURL: oidcServer.URL,
+			Audience:       "audience",
+		},
 	})
 
-	token, err := supplier.GetToken()
+	token, err := supplier.GetToken(context.Background())
 	assert.NoError(t, err)
 	assert.Equal(t, "my-token", token)
 }

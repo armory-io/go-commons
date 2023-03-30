@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
@@ -28,6 +29,6 @@ func TestBearerTokenRoundTripper(t *testing.T) {
 
 type mockTokenSupplier struct{}
 
-func (m mockTokenSupplier) GetToken() (string, error) {
+func (m mockTokenSupplier) GetToken(ctx context.Context) (string, error) {
 	return "my-token", nil
 }
