@@ -48,10 +48,6 @@ func New(
 	}
 
 	var options []otelsql.Option
-	if meterProvider != nil {
-		options = append(options, otelsql.WithMeterProvider(meterProvider))
-	}
-
 	if tracing.Push.Enabled {
 		options = append(options,
 			otelsql.WithSpanNameFormatter(spanNameFormatter{}),
@@ -64,6 +60,14 @@ func New(
 
 	db, err := otelsql.Open("mysql", conn, options...)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := otelsql.RegisterDBStatsMetrics(
+		db,
+		otelsql.WithAttributes(semconv.DBSystemMySQL),
+		otelsql.WithMeterProvider(meterProvider),
+	); err != nil {
 		return nil, err
 	}
 
