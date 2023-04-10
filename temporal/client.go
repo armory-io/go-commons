@@ -6,7 +6,6 @@ import (
 	"github.com/armory-io/go-commons/metrics"
 	"github.com/armory-io/go-commons/opentelemetry"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/workflow"
 	"go.uber.org/fx"
@@ -54,7 +53,7 @@ func ClientProvider(params ProviderParameters) (client.Client, error) {
 		return nil, err
 	}
 	options.MetricsHandler = newMetricsHandler(params.MetricsService)
-	return client.NewClient(*options)
+	return client.Dial(*options)
 }
 
 func optionsFromParams(logger *ZapAdapter, params ProviderParameters) (*client.Options, error) {
@@ -86,10 +85,6 @@ func temporalClientOptions(logger *ZapAdapter, params ProviderParameters) (*clie
 		Namespace:          config.Namespace,
 		ContextPropagators: []workflow.ContextPropagator{NewLoggerContextPropagator(), newWorkflowObservabilityParametersPropagator()},
 		Interceptors:       interceptors,
-	}
-
-	if config.ClientSideEncryptionEnabled {
-		options.DataConverter = NewEncryptionDataConverter(logger, converter.GetDefaultDataConverter(), EncryptionDataConverterOptions{CMKARNs: config.ClientSideEncryptionCMKARNs})
 	}
 
 	return options, nil
@@ -142,10 +137,6 @@ func temporalCloudClientOptions(logger *ZapAdapter, params ProviderParameters) (
 		},
 		ContextPropagators: []workflow.ContextPropagator{NewLoggerContextPropagator(), newWorkflowObservabilityParametersPropagator()},
 		Interceptors:       interceptors,
-	}
-
-	if config.ClientSideEncryptionEnabled {
-		options.DataConverter = NewEncryptionDataConverter(logger, converter.GetDefaultDataConverter(), EncryptionDataConverterOptions{CMKARNs: config.ClientSideEncryptionCMKARNs})
 	}
 
 	return options, nil
