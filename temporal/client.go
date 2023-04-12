@@ -42,7 +42,7 @@ type ProviderParameters struct {
 
 	Logger         *zap.SugaredLogger
 	Config         Configuration
-	MetricsService metrics.MetricsSvc
+	MetricsService metrics.MetricsSvc          `optional:"true"`
 	Tracing        opentelemetry.Configuration `optional:"true"`
 }
 
@@ -52,7 +52,11 @@ func ClientProvider(params ProviderParameters) (client.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	options.MetricsHandler = newMetricsHandler(params.MetricsService)
+
+	if params.MetricsService != nil {
+		options.MetricsHandler = newMetricsHandler(params.MetricsService)
+	}
+
 	return client.Dial(*options)
 }
 
