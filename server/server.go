@@ -904,7 +904,7 @@ func handleUnmarshalError(bytes []byte, err error) serr.Error {
 		offset = int(unmarshalError.Offset)
 		meta["path"] = unmarshalError.Struct + lo.Ternary(unmarshalError.Struct == "" || unmarshalError.Field == "", "", ".") + unmarshalError.Field
 		meta["providedType"] = unmarshalError.Value
-		meta["expectedType"] = unmarshalError.Type.Name()
+		meta["expectedType"] = lo.Ternary(unmarshalError.Type.Name() != "", unmarshalError.Type.Name(), strconv.Itoa(int(unmarshalError.Type.Kind())))
 		meta["reason"] = "cannot unmarshal data"
 	}
 
