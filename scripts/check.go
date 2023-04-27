@@ -171,6 +171,9 @@ func streamTestResults(buildDir string, r io.ReadCloser, done chan bool) {
 		if out.Action == "fail" && out.Test != "" {
 			failedTests = append(failedTests, out.Test)
 		}
+		if strings.HasPrefix(out.Output, "panic:") {
+			failedTests = append(failedTests, out.Test)
+		}
 		trimmedOut := strings.TrimSpace(out.Output)
 		if strings.HasPrefix(trimmedOut, "---") || strings.HasPrefix(trimmedOut, "===") {
 			colorize(out.Output)
