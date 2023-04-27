@@ -4,3 +4,4 @@
 report.json
 profile.cov
 build/*
+/generated

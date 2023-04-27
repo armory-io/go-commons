@@ -1,0 +1,15 @@
+projectName: go-commons
+build:
+  enabled: false
+tools:
+  sqlBoiler:
+    enabled: false
+    configurationTOMLFiles: []
+  mockGen:
+    enabled: true
+  staticCheck:
+    enabled: true
+  prefetchDockerImages:
+    enabled: false
+    imageNames: []
+customSteps: []
