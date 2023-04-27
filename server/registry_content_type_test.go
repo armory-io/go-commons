@@ -257,6 +257,7 @@ func (s *ContentTypesTestSuite) SetupSuite() {
 		config,
 		RequestLoggingConfiguration{Enabled: false},
 		SPAConfiguration{Enabled: false},
+		ProfileConfiguration{Enabled: false},
 		nil,
 		s.log,
 		metrics,

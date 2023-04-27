@@ -29,6 +29,7 @@ type Configuration struct {
 	SPA            SPAConfiguration
 	HTTP           http.HTTP
 	Management     http.HTTP
+	Profile        ProfileConfiguration
 }
 
 // RequestLoggingConfiguration enable request logging, by default all requests are logged.
@@ -46,4 +47,10 @@ type RequestLoggingConfiguration struct {
 	Disable4XX bool
 	// Disable5XX if enabled requests inside the 500-599 range will not be logged
 	Disable5XX bool
+}
+
+// ProfileConfiguration defines options for turning on the golang runtime profiler and having it serve http traffic (for retrieving reports)
+type ProfileConfiguration struct {
+	Enabled        bool
+	OverridePrefix string
 }
