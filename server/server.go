@@ -28,6 +28,7 @@ import (
 	"github.com/armory-io/go-commons/metrics"
 	"github.com/armory-io/go-commons/server/serr"
 	"github.com/creasty/defaults"
+	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
@@ -332,18 +333,18 @@ func ConfigureAndStartHttpServer(
 		var controllers []IController
 		controllers = append(controllers, serverControllers.Controllers...)
 		controllers = append(controllers, managementControllers.Controllers...)
-		err := configureServer("http", lc, config.HTTP, config.RequestLogging, config.SPA, as, logger, ms, md, is, true, requestValidator, controllers...)
+		err := configureServer("http", lc, config.HTTP, config.RequestLogging, config.SPA, config.Profile, as, logger, ms, md, is, true, requestValidator, controllers...)
 		if err != nil {
 			return err
 		}
 		return nil
 	}
 
-	err := configureServer("http", lc, config.HTTP, config.RequestLogging, config.SPA, as, logger, ms, md, is, false, requestValidator, serverControllers.Controllers...)
+	err := configureServer("http", lc, config.HTTP, config.RequestLogging, config.SPA, config.Profile, as, logger, ms, md, is, false, requestValidator, serverControllers.Controllers...)
 	if err != nil {
 		return err
 	}
-	err = configureServer("management", lc, config.Management, config.RequestLogging, config.SPA, as, logger, ms, md, is, true, requestValidator, managementControllers.Controllers...)
+	err = configureServer("management", lc, config.Management, config.RequestLogging, config.SPA, config.Profile, as, logger, ms, md, is, true, requestValidator, managementControllers.Controllers...)
 	if err != nil {
 		return err
 	}
@@ -356,6 +357,7 @@ func configureServer(
 	httpConfig armoryhttp.HTTP,
 	requestLoggingConfig RequestLoggingConfiguration,
 	spaConfig SPAConfiguration,
+	profile ProfileConfiguration,
 	as AuthService,
 	logger *zap.SugaredLogger,
 	ms metrics.MetricsSvc,
@@ -403,6 +405,15 @@ func configureServer(
 	// the prom handler has a bunch of logic that I don't want to have to port, so we will not make a controller for it.
 	if handlesManagement {
 		authNotEnforcedGroup.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	}
+
+	// if this is the management server and profile is enabled turn on pprof
+	if handlesManagement && profile.Enabled {
+		if profile.OverridePrefix != "" {
+			pprof.RouteRegister(authNotEnforcedGroup, profile.OverridePrefix)
+		} else {
+			pprof.RouteRegister(authNotEnforcedGroup)
+		}
 	}
 
 	server := armoryhttp.NewServer(armoryhttp.Configuration{HTTP: httpConfig})
