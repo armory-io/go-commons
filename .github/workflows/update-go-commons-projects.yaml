@@ -11,7 +11,7 @@ jobs:
         uses: benc-uk/workflow-dispatch@v1
         with:
           ref: master
-          repo: armory-io/infra-armory-cloud-github-settings-scraper
-          workflow: Update Go Commons
+          repo: armory-io/js-monorepo
+          workflow: 'Devops - Update Go Commons'
           token: ${{ secrets.ARMORY_PLATFORM_GITHUB_PAT_TOKEN }}
           inputs: '{ "version": "${{ github.event.release.tag_name }}" }'
