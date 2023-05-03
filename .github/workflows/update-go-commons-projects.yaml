@@ -10,7 +10,7 @@ jobs:
       - name: trigger github go-commons updater workflow
         uses: benc-uk/workflow-dispatch@v1
         with:
-          ref: master
+          ref: main
           repo: armory-io/js-monorepo
           workflow: 'Devops - Update Go Commons'
           token: ${{ secrets.ARMORY_PLATFORM_GITHUB_PAT_TOKEN }}
