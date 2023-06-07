@@ -3,6 +3,7 @@ package graphql
 import (
 	"context"
 	"encoding/json"
+	"github.com/Khan/genqlient/graphql"
 	"github.com/armory-io/go-commons/iam"
 	"github.com/google/uuid"
 	"github.com/samber/lo"
@@ -11,37 +12,6 @@ import (
 	"net/http/httptest"
 	"testing"
 )
-
-type (
-	insertPipelinesOne struct {
-		Pipeline struct {
-			ID string
-		} `graphql:"insertPipelinesOne(object: $object)"`
-	}
-
-	pipelinesInsertInput struct {
-		Application applicationInsert `json:"application"`
-		Description string            `json:"description"`
-	}
-
-	applicationInsert struct {
-		Data       application `json:"data"`
-		OnConflict onConflict  `json:"onConflict"`
-	}
-
-	application struct {
-		Name string `json:"name"`
-	}
-
-	onConflict struct {
-		Constraint    string   `json:"constraint"`
-		UpdateColumns []string `json:"updateColumns"`
-	}
-)
-
-func (p *pipelinesInsertInput) GetGraphQLType() string {
-	return "pipelinesInsertInput"
-}
 
 func TestNewClientRequest(t *testing.T) {
 	orgID := uuid.NewString()
@@ -73,23 +43,9 @@ func TestNewClientRequest(t *testing.T) {
 		AdminSecret: "admin",
 	}, http.DefaultClient)
 
-	var insertPipelinesOneResult insertPipelinesOne
-	assert.NoError(t, c.Mutate(ctx, &insertPipelinesOneResult, map[string]any{
-		"object": pipelinesInsertInput{
-			Description: "great pipeline!",
-			Application: applicationInsert{
-				Data: application{
-					Name: "deploy-engine",
-				},
-				OnConflict: onConflict{
-					Constraint:    "key_applications_org_id_env_id_name",
-					UpdateColumns: []string{"name"},
-				},
-			},
-		},
-	}))
-
-	assert.Equal(t, "bananas", insertPipelinesOneResult.Pipeline.ID)
+	var response graphql.Response
+	assert.NoError(t, c.MakeRequest(ctx, &graphql.Request{}, &response))
+	assert.NotNil(t, response.Data)
 }
 
 func TestNewClientNoPrincipal(t *testing.T) {
@@ -98,22 +54,6 @@ func TestNewClientNoPrincipal(t *testing.T) {
 		AdminSecret: "admin",
 	}, http.DefaultClient)
 
-	var insertPipelinesOneResult insertPipelinesOne
-	err := c.Mutate(context.Background(), &insertPipelinesOneResult, map[string]any{
-		"object": pipelinesInsertInput{
-			Description: "great pipeline!",
-			Application: applicationInsert{
-				Data: application{
-					Name: "deploy-engine",
-				},
-				OnConflict: onConflict{
-					Constraint:    "key_applications_org_id_env_id_name",
-					UpdateColumns: []string{"name"},
-				},
-			},
-		},
-	})
-
-	// The client unwraps our error type :(
-	assert.ErrorContains(t, err, ErrUserPrincipalNotFound.Error())
+	err := c.MakeRequest(context.Background(), &graphql.Request{}, &graphql.Response{})
+	assert.ErrorIs(t, err, ErrUserPrincipalNotFound)
 }

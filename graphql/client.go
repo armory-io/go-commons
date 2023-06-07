@@ -2,8 +2,8 @@ package graphql
 
 import (
 	"fmt"
+	"github.com/Khan/genqlient/graphql"
 	"github.com/armory-io/go-commons/iam"
-	"github.com/hasura/go-graphql-client"
 	"github.com/pkg/errors"
 	"net/http"
 )
@@ -34,32 +34,16 @@ type Configuration struct {
 // - The HTTP client's bearer token should have an "admin" scope (OR, in development or staging, you can set the Hasura admin secret).
 // - This GraphQL client will assume the "armory:hasura:admin" role (only possible because of the "admin" scope).
 // - When making requests with the GraphQL client, pass a context with an iam.ArmoryCloudPrincipal.
-func NewClient(config Configuration, hc *http.Client) *graphql.Client {
-	c := graphql.NewClient(config.BaseURL, &doer{
+func NewClient(config Configuration, hc *http.Client) graphql.Client {
+	return graphql.NewClient(config.BaseURL, &doer{
 		client: hc,
-	})
-
-	return c.WithRequestModifier(func(request *http.Request) {
-		if config.AdminSecret != "" {
-			request.Header.Add(adminSecretHeader, config.AdminSecret)
-		}
-
-		principal, err := iam.ExtractPrincipalFromContext(request.Context())
-		if err != nil || principal == nil || principal.OrgId == "" || principal.EnvId == "" {
-			// We should not let the request go out if the principal isn't present,
-			// because Hasura will store (or query) data under the requesting token's tenant (an Armory internal tenant).
-			// We'll be able to return a real error later on in the request lifecycle.
-			return
-		}
-
-		request.Header.Add(orgIDHeader, principal.OrgId)
-		request.Header.Add(envIDHeader, principal.EnvId)
-		request.Header.Add(roleHeader, superuserRole)
+		config: config,
 	})
 }
 
 type doer struct {
 	client *http.Client
+	config Configuration
 }
 
 func (d *doer) Do(request *http.Request) (*http.Response, error) {
@@ -69,5 +53,14 @@ func (d *doer) Do(request *http.Request) (*http.Response, error) {
 	} else if principal == nil || principal.OrgId == "" || principal.EnvId == "" {
 		return nil, ErrUserPrincipalNotFound
 	}
+
+	if d.config.AdminSecret != "" {
+		request.Header.Add(adminSecretHeader, d.config.AdminSecret)
+	}
+
+	request.Header.Add(orgIDHeader, principal.OrgId)
+	request.Header.Add(envIDHeader, principal.EnvId)
+	request.Header.Add(roleHeader, superuserRole)
+
 	return d.client.Do(request)
 }
