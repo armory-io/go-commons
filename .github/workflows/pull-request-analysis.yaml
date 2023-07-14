@@ -12,15 +12,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v2
-
       - name: Configure git for private modules
         run: git config --global url."https://x-access-token:${{ secrets.ARMORY_PLATFORM_GITHUB_PAT_TOKEN }}@github.com".insteadOf "https://github.com"
 
       - uses: armory-io/infra-github-actions/golang-analyze-and-submit-to-sonar@master
         with:
           github_token: ${{ secrets.ARMORY_PLATFORM_GITHUB_PAT_TOKEN }}
+          vault_addr: ${{ secrets.VAULT_ADDR }}
+          vault_token: ${{ secrets.VAULT_TOKEN }}
           sonar_token: ${{ secrets.SONAR_TOKEN }}
           sonar_host_url: ${{ secrets.SONAR_HOST_URL }}
           go_version: '1.18'
