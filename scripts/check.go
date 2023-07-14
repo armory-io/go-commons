@@ -80,6 +80,7 @@ func main() {
 
 	args = append(args, packages...)
 	args = append(args, "-json")
+	args = append(args, "-timeout", "20m")
 
 	cmd := exec.Command("go", args...)
 
@@ -152,6 +153,7 @@ func streamTestResults(buildDir string, r io.ReadCloser, done chan bool) {
 	writer := bufio.NewWriter(results)
 	scanner := bufio.NewScanner(r)
 	otherFails := 0
+	testDetails := make(map[string][]string)
 	for scanner.Scan() {
 		out := &TestOutput{}
 		line := scanner.Text()
@@ -160,6 +162,15 @@ func streamTestResults(buildDir string, r io.ReadCloser, done chan bool) {
 			otherFails++
 			continue
 		}
+
+		if out.Test != "" {
+			lines := testDetails[out.Test]
+			if out.Output != "" {
+				lines = append(lines, out.Output)
+				testDetails[out.Test] = lines
+			}
+		}
+
 		if out.Action == "" {
 			continue
 		}
@@ -183,7 +194,11 @@ func streamTestResults(buildDir string, r io.ReadCloser, done chan bool) {
 		boldRed.Println("                                                    !!!! TEST FAILURES !!!!")
 		boldRed.Println("------------------------------------------------------------------------------------------------------------------------------------")
 		for i := len(failedTests) - 1; i >= 0; i-- {
-			fmt.Printf("- %s\n", failedTests[i])
+			fmt.Printf("\n\n- %s\n\n", failedTests[i])
+			lines := testDetails[failedTests[i]]
+			for _, line := range lines {
+				fmt.Print(line)
+			}
 		}
 		fmt.Println("------------------------------------------------------------------------------------------------------------------------------------")
 		fmt.Println("The human readable tests report w/ stdout and stderr will be uploaded in the reports artifact to this workflow")
