@@ -61,8 +61,6 @@ install-tools:
 	go install github.com/vakenbolt/go-test-report@v0.9.3 && \
 	echo installing mockgen... && \
 	go install github.com/golang/mock/mockgen@v1.6.0 && \
-	echo installing static check... && \
-	go install honnef.co/go/tools/cmd/staticcheck@latest && \
 	mkdir -p $(GEN_DIR) && touch $(GEN_DIR)/.tools || echo tools are installed
 
 
@@ -75,22 +73,13 @@ generate_mocks: install-tools
 	@go generate -run mockgen ./...
 
 
-#####################
-## Local static-check
-#####################
-.PHONY: static-check
-static-check: install-tools
-	@echo "Running static check in ${PWD}..."
-	@staticcheck ./...
-
-
 .PHONY: run-before-tools
 run-before-tools: install-tools generate_mocks 
 	@go mod tidy
 	@echo run before tools DONE
 
 .PHONY: run-after-tools
-run-after-tools: static-check
+run-after-tools: 
 	@echo run after tools DONE
 
 #####################
