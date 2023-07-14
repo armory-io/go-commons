@@ -23,7 +23,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/zap"
-	"net/http"
 )
 
 type (
@@ -118,73 +117,6 @@ type (
 	}
 )
 
-func Example_Handler() {
-	//  most trivial case
-
-	NewHandler(func(ctx context.Context, _ Void) (*Response[string], serr.Error) {
-		return SimpleResponse("hello"), nil
-	}, HandlerConfig{
-		Path:       "/api/thething",
-		Method:     http.MethodGet,  // <- optional, GET is default
-		StatusCode: http.StatusOK,   // <- optional, 200 is default
-		Label:      "list resource", // <- metadata, required for test purposes when you want to test specific method
-	})
-}
-
-func Example_New1ArgHandler() {
-	// single parameter from path
-	//lint:ignore U1000 Handler example
-	type theThingPathParams struct {
-		ResourceID   string `validate:"uuid-type,max=36"` // note the capitalization in resource name - required for json unmarshalling, validation is optional
-		ResourceType string
-	}
-
-	// required method to tell the handler where to look for parameter's values (can't define it inline :( )
-	// func (theThingPathParams) Source() ArgumentDataSource { return server.PathContextSource }
-
-	New1ArgHandler(func(ctx context.Context, _ Void, args voidArgument /*should be replaced with theThingPathParams */) (*Response[string], serr.Error) {
-		return SimpleResponse("hello"), nil
-	}, HandlerConfig{
-		Path:       "/api/thething/:resourceId/type/:resourceType",
-		Method:     http.MethodGet, // <- optional, GET is default
-		StatusCode: http.StatusOK,  // <- optional, 200 is default
-		Label:      "get resource", // <- metadata, required for test purposes when you want to test specific method
-	})
-
-}
-
-func Example_New3ArgHandler() {
-	//  parameters from path and from headers, as well as currently logged principal
-	//lint:ignore U1000 Handler example
-	type theThingPathParams struct {
-		ResourceID   string `validate:"uuid-type,max=36"` // note the capitalization in resource name - required for json unmarshalling, validation is optional
-		ResourceType string
-	}
-
-	// required method to tell the handler where to look for parameter's values (can't be defined inline)
-	// func (theThingPathParams) Source() server.ArgumentDataSource { return server.PathContextSource }
-
-	//lint:ignore U1000 Handler example
-	type keyHeaderParams struct {
-		LicenseKeyHeader []string `mapstructure:"x-key-id" validate:"required,max=1,dive,required"` // tells to look for header in x-key-id header as well as enforces that one value of the header is provided
-	}
-
-	// required method to tell the handler where to look for parameter's values (can't be defined inline)
-	// func (keyHeaderParams) Source() server.ArgumentDataSource { return server.HeaderContextSource } // required method to tell the handler where to look for parameter's values
-	//
-	// utility method to simplify handling of the parameter - it is ensured to be valid, so no additional checks required here (can't be defined inline)
-	// func (k keyHeaderParams) license() string { return k.LicenseKeyHeader[0] }
-	//
-	New3ArgHandler(func(ctx context.Context, _ Void, args voidArgument /*theThingPathParams*/, licenseParam voidArgument /* keyHeaderParams*/, caller ArmoryPrincipalArgument) (*Response[string], serr.Error) {
-		return SimpleResponse("hello"), nil
-	}, HandlerConfig{
-		Path:       "/api/thething/:resourceId/type/:resourceType",
-		Method:     http.MethodPost,
-		StatusCode: http.StatusOK,     // <- optional, 200 is default
-		Label:      "create resource", // <- metadata, required for test purposes when you want to test specific method
-	})
-}
-
 const (
 	voidArgumentSource  ArgumentDataSource = -1
 	PathContextSource   ArgumentDataSource = 0
@@ -212,7 +144,8 @@ func (voidArgument) Source() ArgumentDataSource {
 	return voidArgumentSource
 }
 
-// NewHandler creates a Handler from a handler function and server.HandlerConfig
+// NewHandler creates a Handler from a handler function and server.HandlerConfig accepting single, strongly typed argument extracted from submitted HTTP body - typical usage for POST or PUT requests
+// i.e. handler function like func OnRequest(ctx context.Context, body api.YourRequestType) (*Response[api.YourResponseType, serr.Error)
 func NewHandler[REQUEST, RESPONSE any](f func(ctx context.Context, request REQUEST) (*Response[RESPONSE], serr.Error), config HandlerConfig) *Handler1Extensions[REQUEST, RESPONSE] {
 	return &Handler1Extensions[REQUEST, RESPONSE]{
 		&handler[REQUEST, RESPONSE]{
@@ -223,6 +156,24 @@ func NewHandler[REQUEST, RESPONSE any](f func(ctx context.Context, request REQUE
 	}
 }
 
+// NewNoContentHandler - creates a Handler from a handler function and server.HandlerConfig without any input argument - typical use case would be any GET or DELETE request, where no Http content is expected
+// i.e. handler function like func OnRequest(ctx context.Context) (*Response[api.YourResponseType, serr.Error)
+func NewNoContentHandler[RESPONSE any](f func(ctx context.Context) (*Response[RESPONSE], serr.Error), config HandlerConfig) *Handler1Extensions[Void, RESPONSE] {
+	return &Handler1Extensions[Void, RESPONSE]{
+		&handler[Void, RESPONSE]{
+			config:          config,
+			extractArgsFunc: extractArgsFromRequest1[Void],
+			handleFunc:      func(c context.Context, _ Void) (*Response[RESPONSE], serr.Error) { return f(c) },
+		},
+	}
+}
+
+// New1ArgHandler - creates a Handler from a handler function and server.HandlerConfig with a single input argument from submitted request body (typically Http POST or PUT) and additional argument provided by one of Path parameters, Query parameters or Headers
+// i.e. handler function like func OnRequest(ctx context.Context, body api.YourRequestType, args api.AdditionalParameters) (*Response[api.YourResponseType], serr.Error)
+// where api.AdditionalParameters would contain extracted values from:
+//    path: i.e. /api/v1/parent/:ID/child/:childID
+//    query: i.e. /api/v1/parent?foo=BAR
+//    headers
 func New1ArgHandler[REQUEST, RESPONSE any, CTX HandlerArgument](f func(ctx context.Context, request REQUEST, arg1 CTX) (*Response[RESPONSE], serr.Error), config HandlerConfig) *Handler2Extensions[REQUEST, RESPONSE, CTX] {
 
 	var delegate handleRequestDelegate[REQUEST, RESPONSE] = func(ctx context.Context, r REQUEST) (*Response[RESPONSE], serr.Error) {
@@ -239,6 +190,34 @@ func New1ArgHandler[REQUEST, RESPONSE any, CTX HandlerArgument](f func(ctx conte
 	}
 }
 
+// New1ArgNoContentHandler - creates a Handler from a handler function and server.HandlerConfig without body argument (typically Http GET or DELETE) and argument provided by one of Path parameters, Query parameters or Headers
+// i.e. handler function like func OnRequest(ctx context.Context, args api.AdditionalParameters) (*Response[api.YourResponseType], serr.Error)
+// where api.AdditionalParameters would contain extracted values from:
+//    path: i.e. /api/v1/parent/:ID/child/:childID
+//    query: i.e. /api/v1/parent?foo=BAR
+//    headers
+func New1ArgNoContentHandler[RESPONSE any, CTX HandlerArgument](f func(ctx context.Context, arg1 CTX) (*Response[RESPONSE], serr.Error), config HandlerConfig) *Handler2Extensions[Void, RESPONSE, CTX] {
+
+	var delegate handleRequestDelegate[Void, RESPONSE] = func(ctx context.Context, _ Void) (*Response[RESPONSE], serr.Error) {
+		args := referenceArguments[Void, CTX, voidArgument, voidArgument](ctx)
+		return f(ctx, *args.Arg1)
+	}
+
+	return &Handler2Extensions[Void, RESPONSE, CTX]{
+		&handler[Void, RESPONSE]{
+			config:          config,
+			extractArgsFunc: extractArgsFromRequest2[Void, CTX],
+			handleFunc:      delegate,
+		},
+	}
+}
+
+// New2ArgHandler - creates a Handler from a handler function and server.HandlerConfig with body argument (typically Http POST or PUT) and 2 arguments provided by one of Path parameters, Query parameters or Headers
+// i.e. handler function like func OnRequest(ctx context.Context, body api.YourRequestType, args1 api.AdditionalParameters1, args2 api.AdditionalParameters2) (*Response[api.YourResponseType], serr.Error)
+// where api.AdditionalParameters1 and api.AdditionalParameters2 would contain extracted values from:
+//    path: i.e. /api/v1/parent/:ID/child/:childID
+//    query: i.e. /api/v1/parent?foo=BAR
+//    headers
 func New2ArgHandler[REQUEST, RESPONSE any, CTX1 HandlerArgument, CTX2 HandlerArgument](f func(ctx context.Context, request REQUEST, arg1 CTX1, arg2 CTX2) (*Response[RESPONSE], serr.Error), config HandlerConfig) *Handler3Extensions[REQUEST, RESPONSE, CTX1, CTX2] {
 
 	var delegate handleRequestDelegate[REQUEST, RESPONSE] = func(ctx context.Context, r REQUEST) (*Response[RESPONSE], serr.Error) {
@@ -255,8 +234,36 @@ func New2ArgHandler[REQUEST, RESPONSE any, CTX1 HandlerArgument, CTX2 HandlerArg
 	}
 }
 
+// New2ArgNoContentHandler - creates a Handler from a handler function and server.HandlerConfig without body argument (typically Http GET or DELETE) and argument provided by one of Path parameters, Query parameters or Headers
+// i.e. handler function like func OnRequest(ctx context.Context, args1 api.AdditionalParameters1, args2 api.AdditionalParameters2) (*Response[api.YourResponseType], serr.Error)
+// where api.AdditionalParameters1 and api.AdditionalParameters2 would contain extracted values from:
+//    path: i.e. /api/v1/parent/:ID/child/:childID
+//    query: i.e. /api/v1/parent?foo=BAR
+//    headers
+func New2ArgNoContentHandler[RESPONSE any, CTX1 HandlerArgument, CTX2 HandlerArgument](f func(ctx context.Context, arg1 CTX1, arg2 CTX2) (*Response[RESPONSE], serr.Error), config HandlerConfig) *Handler3Extensions[Void, RESPONSE, CTX1, CTX2] {
+
+	var delegate handleRequestDelegate[Void, RESPONSE] = func(ctx context.Context, _ Void) (*Response[RESPONSE], serr.Error) {
+		args := referenceArguments[Void, CTX1, CTX2, voidArgument](ctx)
+		return f(ctx, *args.Arg1, *args.Arg2)
+	}
+
+	return &Handler3Extensions[Void, RESPONSE, CTX1, CTX2]{
+		&handler[Void, RESPONSE]{
+			config:          config,
+			extractArgsFunc: extractArgsFromRequest3[Void, CTX1, CTX2],
+			handleFunc:      delegate,
+		},
+	}
+}
+
+// New3ArgHandler - creates a Handler from a handler function and server.HandlerConfig with body argument (typically Http POST or PUT) and 3 arguments provided by one of Path parameters, Query parameters or Headers
+// i.e. handler function like func OnRequest(ctx context.Context, body api.YourRequestType, args1 api.AdditionalParameters1, args2 api.AdditionalParameters2, args3 api.AdditionalParameters3) (*Response[api.YourResponseType], serr.Error)
+// where api.AdditionalParameters1, api.AdditionalParameters2 and api.AdditionalParameters3 would contain extracted values from:
+//    path: i.e. /api/v1/parent/:ID/child/:childID
+//    query: i.e. /api/v1/parent?foo=BAR
+//    headers
 func New3ArgHandler[REQUEST, RESPONSE any, CTX1 HandlerArgument, CTX2 HandlerArgument, CTX3 HandlerArgument](
-	f func(ctx context.Context, request REQUEST, arg1 CTX1, arg2 CTX2, arg3 CTX3) (*Response[RESPONSE], serr.Error), config HandlerConfig) *Handler4Extensions[REQUEST, RESPONSE, CTX1, CTX2, CTX3] {
+  f func(ctx context.Context, request REQUEST, arg1 CTX1, arg2 CTX2, arg3 CTX3) (*Response[RESPONSE], serr.Error), config HandlerConfig) *Handler4Extensions[REQUEST, RESPONSE, CTX1, CTX2, CTX3] {
 
 	var delegate handleRequestDelegate[REQUEST, RESPONSE] = func(ctx context.Context, r REQUEST) (*Response[RESPONSE], serr.Error) {
 		args := referenceArguments[REQUEST, CTX1, CTX2, CTX3](ctx)
@@ -267,6 +274,29 @@ func New3ArgHandler[REQUEST, RESPONSE any, CTX1 HandlerArgument, CTX2 HandlerArg
 		&handler[REQUEST, RESPONSE]{
 			config:          config,
 			extractArgsFunc: extractArgsFromRequest4[REQUEST, CTX1, CTX2, CTX3],
+			handleFunc:      delegate,
+		},
+	}
+}
+
+// New3ArgNoContentHandler - creates a Handler from a handler function and server.HandlerConfig without body argument (typically Http GET or DELETE) and 3 arguments provided by one of Path parameters, Query parameters or Headers
+// i.e. handler function like func OnRequest(ctx context.Context, args1 api.AdditionalParameters1, args2 api.AdditionalParameters2, args3 api.AdditionalParameters3) (*Response[api.YourResponseType], serr.Error)
+// where api.AdditionalParameters1, api.AdditionalParameters2 and api.AdditionalParameters3 would contain extracted values from:
+//    path: i.e. /api/v1/parent/:ID/child/:childID
+//    query: i.e. /api/v1/parent?foo=BAR
+//    headers
+func New3ArgNoContentHandler[RESPONSE any, CTX1 HandlerArgument, CTX2 HandlerArgument, CTX3 HandlerArgument](
+  f func(ctx context.Context, arg1 CTX1, arg2 CTX2, arg3 CTX3) (*Response[RESPONSE], serr.Error), config HandlerConfig) *Handler4Extensions[Void, RESPONSE, CTX1, CTX2, CTX3] {
+
+	var delegate handleRequestDelegate[Void, RESPONSE] = func(ctx context.Context, _ Void) (*Response[RESPONSE], serr.Error) {
+		args := referenceArguments[Void, CTX1, CTX2, CTX3](ctx)
+		return f(ctx, *args.Arg1, *args.Arg2, *args.Arg3)
+	}
+
+	return &Handler4Extensions[Void, RESPONSE, CTX1, CTX2, CTX3]{
+		&handler[Void, RESPONSE]{
+			config:          config,
+			extractArgsFunc: extractArgsFromRequest4[Void, CTX1, CTX2, CTX3],
 			handleFunc:      delegate,
 		},
 	}
