@@ -10,11 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/fatih/color"
-	"net/http"
-	"regexp"
-	"sort"
-	"strconv"
-
 	"io"
 	"k8s.io/utils/strings/slices"
 	"log"
