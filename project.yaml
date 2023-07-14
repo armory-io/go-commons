@@ -8,7 +8,7 @@ tools:
   mockGen:
     enabled: true
   staticCheck:
-    enabled: false
+    enabled: true
   prefetchDockerImages:
     enabled: false
     imageNames: []
