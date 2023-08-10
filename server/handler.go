@@ -50,7 +50,7 @@ type (
 		Default bool
 		// StatusCode The default status code to return when the request is successful, can be overridden by the handler by setting Response.StatusCode in the handler
 		StatusCode int
-		// AuthOptOut Set this to true if the handler should skip AuthZ and AuthN, this will cause the principal to be nil in the request context
+		// AuthOptOut Set this to true if the handler should skip AuthZ and AuthN.
 		AuthOptOut bool
 		// AuthZValidator see AuthZValidatorFn
 		AuthZValidator AuthZValidatorFn
