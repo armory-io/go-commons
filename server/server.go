@@ -381,6 +381,7 @@ func configureServer(
 	}
 
 	authNotEnforcedGroup := g.Group(httpConfig.Prefix)
+	authNotEnforcedGroup.Use(ginAttemptAuthMiddleware(as))
 
 	// Allow a web-app to serve a single page application (SPA), such as react, vue, angular, etc.
 	if spaConfig.Enabled {
@@ -388,7 +389,7 @@ func configureServer(
 	}
 
 	authRequiredGroup := g.Group(httpConfig.Prefix)
-	authRequiredGroup.Use(ginAuthMiddleware(as, logger))
+	authRequiredGroup.Use(ginEnforceAuthMiddleware(as, logger))
 
 	handlerRegistry, err := newHandlerRegistry(name, logger, requestValidator, controllers)
 	if err != nil {

@@ -24,24 +24,34 @@ import (
 	"net/http"
 )
 
-func ginAuthMiddleware(as AuthService, log *zap.SugaredLogger) gin.HandlerFunc {
+// ginEnforceAuthMiddleware extracts an iam.ArmoryCloudPrincipal from the incoming HTTP request.
+// If a principal cannot be extracted from the request, the middleware aborts the middleware chain
+// and returns a 401.
+func ginEnforceAuthMiddleware(as AuthService, log *zap.SugaredLogger) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// extract access token from request
-		auth, err := iam.ExtractBearerToken(c.Request)
-		if err != nil {
-			apiErr := serr.NewSimpleErrorWithStatusCode(
-				"Failed to extract access token from request", http.StatusUnauthorized, err)
-			writeAndLogApiErrorThenAbort(c, apiErr, log)
+		if err := extractPrincipalFromHTTPRequestAndSetContext(c, as); err != nil {
+			writeAndLogApiErrorThenAbort(c, err, log)
 			c.Abort()
-			return
-		}
-		// verify principal from access token
-		if err := as.VerifyPrincipalAndSetContext(auth, c); err != nil {
-			apiErr := serr.NewSimpleErrorWithStatusCode(
-				"Failed to verify principal from access token", http.StatusUnauthorized, err)
-			writeAndLogApiErrorThenAbort(c, apiErr, log)
-			c.Abort()
-			return
 		}
 	}
+}
+
+// ginAttemptAuthMiddleware attempts to extract an iam.ArmoryCloudPrincipal from the incoming HTTP request,
+// but does not abort the middleware chain if it cannot do so.
+func ginAttemptAuthMiddleware(as AuthService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		_ = extractPrincipalFromHTTPRequestAndSetContext(c, as)
+	}
+}
+
+func extractPrincipalFromHTTPRequestAndSetContext(c *gin.Context, as AuthService) serr.Error {
+	auth, err := iam.ExtractBearerToken(c.Request)
+	if err != nil {
+		return serr.NewSimpleErrorWithStatusCode("Failed to extract access token from request", http.StatusUnauthorized, err)
+	}
+
+	if err := as.VerifyPrincipalAndSetContext(auth, c); err != nil {
+		return serr.NewSimpleErrorWithStatusCode("Failed to verify principal from access token", http.StatusUnauthorized, err)
+	}
+	return nil
 }
