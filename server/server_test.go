@@ -1067,6 +1067,51 @@ func (s *ServerTestSuite) TestGinHOF() {
 		assert.Equal(t, http.StatusOK, code)
 		assert.Equal(t, "you shall pass", *result)
 	})
+
+	s.T().Run("principal with permissions will get 200 on simple GET", func(t *testing.T) {
+		htc := NewHandlerTestContext(t, newDummyController().Controller, HandlerByLabel("helloThere"))
+		ctx, handler, resp := htc.
+			WithPrincipal(t, &iam.ArmoryCloudPrincipal{Name: "Cartman", Scopes: []string{"api:dummy:full"}}).
+			BuildHandler(t)
+
+		handler(ctx)
+
+		result, code := ExtractResponseDataAndCode[string](t, resp)
+
+		assert.Equal(t, http.StatusOK, code)
+		assert.Equal(t, "hello there Cartman", *result)
+	})
+
+	s.T().Run("principal with permissions will get 200 on simple GET with PathParams", func(t *testing.T) {
+		htc := NewHandlerTestContext(t, newDummyController().Controller, HandlerByLabel("helloThereExtended"))
+		ctx, handler, resp := htc.
+			WithPrincipal(t, &iam.ArmoryCloudPrincipal{Name: "Cartman", Scopes: []string{"api:dummy:full"}}).
+			WithPathParameters(t, "resourceID", "welcome", "subResourceID", "123").
+			BuildHandler(t)
+
+		handler(ctx)
+
+		result, code := ExtractResponseDataAndCode[string](t, resp)
+
+		assert.Equal(t, http.StatusOK, code)
+		assert.Equal(t, "welcome Cartman", *result)
+	})
+
+	s.T().Run("principal with permissions will get 200 on simple GET with PathParams and QueryParams", func(t *testing.T) {
+		htc := NewHandlerTestContext(t, newDummyController().Controller, HandlerByLabel("helloThereFull"))
+		ctx, handler, resp := htc.
+			WithPrincipal(t, &iam.ArmoryCloudPrincipal{Name: "Cartman", Scopes: []string{"api:dummy:full"}}).
+			WithPathParameters(t, "resourceID", "welcome", "subResourceID", "123").
+			WithRequestUrl(t, "https://foo.bar?QueryComponent=to_office").
+			BuildHandler(t)
+
+		handler(ctx)
+
+		result, code := ExtractResponseDataAndCode[string](t, resp)
+
+		assert.Equal(t, http.StatusOK, code)
+		assert.Equal(t, "welcome to_office Cartman", *result)
+	})
 }
 
 type Book struct {
@@ -1168,8 +1213,20 @@ func (*dummyController) StringPassThroughWithPrincipal(c context.Context, body s
 	return SimpleResponse(body.Prompt + p.Name), nil
 }
 
-func (*dummyController) RestrictedTo_Api_Dummy_Full(_ context.Context, _ Void) (*Response[string], serr.Error) {
+func (*dummyController) RestrictedToSpecificClaims(_ context.Context) (*Response[string], serr.Error) {
 	return SimpleResponse("you shall pass"), nil
+}
+
+func (*dummyController) SimpleGetWithPrincipalArgumentOnly(_ context.Context, principal ArmoryPrincipalArgument) (*Response[string], serr.Error) {
+	return SimpleResponse("hello there " + principal.Name), nil
+}
+
+func (*dummyController) SimpleGetWithPrincipalArgumentAndPathParam(_ context.Context, principal ArmoryPrincipalArgument, arg1 PathParameters) (*Response[string], serr.Error) {
+	return SimpleResponse(arg1.ResourceID + " " + principal.Name), nil
+}
+
+func (*dummyController) SimpleGetWithPrincipalArgumentPathParamAndQueryParam(_ context.Context, principal ArmoryPrincipalArgument, arg1 PathParameters, arg2 QueryParameters) (*Response[string], serr.Error) {
+	return SimpleResponse(arg1.ResourceID + " " + arg2.QueryComponent[0] + " " + principal.Name), nil
 }
 
 func (d *dummyController) Handlers() []Handler {
@@ -1200,7 +1257,7 @@ func (d *dummyController) Handlers() []Handler {
 			Label:      "passThroughWithPrincipal",
 		}),
 
-		NewHandler(d.RestrictedTo_Api_Dummy_Full, HandlerConfig{
+		NewNoContentHandler(d.RestrictedToSpecificClaims, HandlerConfig{
 			Path:   "/foo/restrict",
 			Method: http.MethodGet,
 			AuthZValidatorExtended: func(ctx context.Context, p *iam.ArmoryCloudPrincipal) (string, bool) {
@@ -1210,6 +1267,22 @@ func (d *dummyController) Handlers() []Handler {
 				return "you shall not pass", false
 			},
 			Label: "onlyWithRequiredScope",
+		}),
+
+		New1ArgNoContentHandler(d.SimpleGetWithPrincipalArgumentOnly, HandlerConfig{
+			Path:   "/foo/hello",
+			Method: http.MethodGet,
+			Label:  "helloThere",
+		}),
+		New2ArgNoContentHandler(d.SimpleGetWithPrincipalArgumentAndPathParam, HandlerConfig{
+			Path:   "/home/:resourceID/:subResourceID",
+			Method: http.MethodGet,
+			Label:  "helloThereExtended",
+		}),
+		New3ArgNoContentHandler(d.SimpleGetWithPrincipalArgumentPathParamAndQueryParam, HandlerConfig{
+			Path:   "/work/:resourceID/:subResourceID",
+			Method: http.MethodGet,
+			Label:  "helloThereFull",
 		}),
 	}
 }
