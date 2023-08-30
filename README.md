@@ -9,16 +9,16 @@
 [![Reliability Rating](https://sonarqube.platform-tools.cloud.armory.io/api/project_badges/measure?project=go-commons&metric=reliability_rating&token=squ_febb36213578f2ca0351f320da27dcc4920c8384)](https://sonarqube.platform-tools.cloud.armory.io/dashboard?id=go-commons)
 [![Maintainability Rating](https://sonarqube.platform-tools.cloud.armory.io/api/project_badges/measure?project=go-commons&metric=sqale_rating&token=squ_febb36213578f2ca0351f320da27dcc4920c8384)](https://sonarqube.platform-tools.cloud.armory.io/dashboard?id=go-commons)
 
-Common Go libraries that Armory uses to build microservices and tools
+Common Go libraries that Armory uses to build microservices and tools.
 
 ## Versioning Notice
 
-This project will not be following sym ver until 2.0.0, breaking changes can happen without a major version bump.
+This project will not be following [semantic versioning](https://semver.org/) until 2.0.0, breaking changes can happen without a major version bump.
 
 ## Security Reporting
 
-Please email [engineering@armory.io](mailto:engineering@armory.io)
+Please email [engineering@armory.io](mailto:engineering@armory.io).
 
 ## License
 
-This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE) file for details
+This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE) file for details.
