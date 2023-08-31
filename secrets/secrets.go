@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 	yamlParse "gopkg.in/yaml.v2"
-	"io/ioutil"
+	"os"
 	"reflect"
 	"strings"
 )
@@ -103,7 +103,7 @@ func parseSecretFile(fileContents []byte, key string) (string, error) {
 }
 
 func ToTempFile(content []byte) (string, error) {
-	f, err := ioutil.TempFile("", "secret-")
+	f, err := os.CreateTemp("", "secret-")
 	if err != nil {
 		return "", err
 	}

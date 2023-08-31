@@ -24,7 +24,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/armory-io/go-commons/secrets"
-	"io/ioutil"
 	"os"
 )
 
@@ -88,7 +87,7 @@ func addCaCert(cfg *tls.Config, s *ClientTLSSettings) error {
 	}
 
 	// Create a CA certificate pool and add our server certificate
-	caCert, err := ioutil.ReadFile(caFile)
+	caCert, err := os.ReadFile(caFile)
 	if err != nil {
 		return err
 	}
@@ -124,7 +123,7 @@ func GetX509KeyPair(certFile, keyFile, keyPassword string) (tls.Certificate, err
 		return tls.Certificate{}, fmt.Errorf("error with certificate file %s: %w", certFile, err)
 	}
 
-	b, err := ioutil.ReadFile(certFile)
+	b, err := os.ReadFile(certFile)
 	if err != nil {
 		return tls.Certificate{}, err
 	}
@@ -149,7 +148,7 @@ func getPrivateKey(keyFile, keyPassword string) ([]byte, error) {
 	if err := CheckFileExists(keyFile); err != nil {
 		return nil, fmt.Errorf("error with key file %s: %w", keyFile, err)
 	}
-	b, err := ioutil.ReadFile(keyFile)
+	b, err := os.ReadFile(keyFile)
 	if err != nil {
 		return nil, err
 	}

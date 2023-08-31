@@ -21,8 +21,8 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"net/http"
+	"os"
 )
 
 const (
@@ -117,7 +117,7 @@ func (s *Server) startTls(router http.Handler) error {
 		}
 
 		// Create a CA certificate pool and add our server certificate
-		caCert, err := ioutil.ReadFile(caFile)
+		caCert, err := os.ReadFile(caFile)
 		if err != nil {
 			return err
 		}

@@ -23,7 +23,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"io/ioutil"
+	"os"
 	"testing"
 )
 
@@ -34,7 +34,7 @@ type MockAwsSecretsManagerClient struct {
 }
 
 func (m *MockAwsSecretsManagerClient) FetchSecret(secretName string) (*secretsmanager.GetSecretValueOutput, error) {
-	mockPayloadBytes, _ := ioutil.ReadFile("./aws-secrets-manager/" + m.payload)
+	mockPayloadBytes, _ := os.ReadFile("./aws-secrets-manager/" + m.payload)
 	res := &secretsmanager.GetSecretValueOutput{}
 	err := json.Unmarshal(mockPayloadBytes, res)
 	if err != nil {
@@ -228,8 +228,8 @@ func TestDecrypt(t *testing.T) {
 			}
 
 			if c.isFile {
-				expectedBytes, _ := ioutil.ReadFile("./aws-secrets-manager/" + c.expectedFile)
-				actualBytes, _ := ioutil.ReadFile(secret)
+				expectedBytes, _ := os.ReadFile("./aws-secrets-manager/" + c.expectedFile)
+				actualBytes, _ := os.ReadFile(secret)
 				assert.Equal(t, expectedBytes, actualBytes)
 			} else {
 				assert.Equal(t, c.expectedSecret, secret)

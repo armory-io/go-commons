@@ -20,7 +20,7 @@ import (
 	"cloud.google.com/go/storage"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"strings"
 )
 
@@ -90,7 +90,7 @@ func (gcs *GcsDecrypter) fetchSecret(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("unable to get reader for bucket: %s, file: %s, error: %v", gcs.bucket, gcs.filepath, err)
 	}
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	if err != nil {
 		return "", fmt.Errorf("unable to download file from bucket: %s, file: %s, error: %v", gcs.bucket, gcs.filepath, err)
 	}
