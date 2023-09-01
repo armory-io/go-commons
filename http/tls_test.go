@@ -18,7 +18,6 @@ package http
 
 import (
 	"github.com/stretchr/testify/assert"
-	"io/ioutil"
 	"os"
 	"testing"
 )
@@ -72,7 +71,7 @@ func TestFileReadable(t *testing.T) {
 	}
 
 	// set up a non empty temp file
-	tmpfile, err := ioutil.TempFile("", "cert")
+	tmpfile, err := os.CreateTemp("", "cert")
 	if !assert.Nil(t, err) {
 		return
 	}

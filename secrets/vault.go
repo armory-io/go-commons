@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -160,7 +159,7 @@ func (v *VaultDecrypter) setTokenFetcher() error {
 		tokenFetcher = KubernetesServiceAccountTokenFetcher{
 			role:       v.vaultConfig.Role,
 			path:       v.vaultConfig.Path,
-			fileReader: ioutil.ReadFile,
+			fileReader: os.ReadFile,
 		}
 	case "USERPASS":
 		tokenFetcher = UserPassTokenFetcher{

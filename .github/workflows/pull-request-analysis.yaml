@@ -22,4 +22,3 @@ jobs:
           vault_token: ${{ secrets.VAULT_TOKEN }}
           sonar_token: ${{ secrets.SONAR_TOKEN }}
           sonar_host_url: ${{ secrets.SONAR_HOST_URL }}
-          go_version: '1.18'
