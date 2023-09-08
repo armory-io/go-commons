@@ -35,6 +35,7 @@ const (
 
 var (
 	ErrUnauthorized = errors.New("unauthorized")
+	ErrNoPrincipal  = errors.New("unable to extract armory principal from request")
 )
 
 type principalContextKey struct{}
@@ -59,12 +60,16 @@ func New(settings Configuration) (*ArmoryCloudPrincipalService, error) {
 	}, nil
 }
 
+type valuer interface {
+	Value(any) any
+}
+
 // ExtractPrincipalFromContext can be used by any handler or downstream middleware of the ArmoryCloudPrincipalMiddleware
 // to get the encoded principal for manual verification of scopes.
-func ExtractPrincipalFromContext(ctx context.Context) (*ArmoryCloudPrincipal, error) {
+func ExtractPrincipalFromContext(ctx valuer) (*ArmoryCloudPrincipal, error) {
 	v, ok := ctx.Value(principalContextKey{}).(ArmoryCloudPrincipal)
 	if !ok {
-		return nil, errors.New("unable to extract armory principal from request")
+		return nil, ErrNoPrincipal
 	}
 	return &v, nil
 }

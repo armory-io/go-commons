@@ -11,7 +11,7 @@ import (
 	"sync"
 )
 
-const propagationKey = "armory-logging"
+const loggingPropagationKey = "armory-logging"
 
 type (
 	loggerContextKey struct{}
@@ -25,7 +25,7 @@ type (
 )
 
 func ExtractLoggerMetadata(header *common.Header) (map[string]string, error) {
-	loggingMetadata, ok := header.Fields[propagationKey]
+	loggingMetadata, ok := header.Fields[loggingPropagationKey]
 	if !ok {
 		return make(map[string]string), nil
 	}
@@ -63,12 +63,12 @@ func (p *loggerContextPropagator) Inject(ctx context.Context, writer workflow.He
 	if err != nil {
 		return err
 	}
-	writer.Set(propagationKey, payload)
+	writer.Set(loggingPropagationKey, payload)
 	return nil
 }
 
 func (p *loggerContextPropagator) Extract(ctx context.Context, reader workflow.HeaderReader) (context.Context, error) {
-	if raw, ok := reader.Get(propagationKey); ok {
+	if raw, ok := reader.Get(loggingPropagationKey); ok {
 		var fields []LoggerField
 		if err := converter.GetDefaultDataConverter().FromPayload(raw, &fields); err != nil {
 			return ctx, nil
@@ -85,12 +85,12 @@ func (p *loggerContextPropagator) InjectFromWorkflow(ctx workflow.Context, write
 	if err != nil {
 		return err
 	}
-	writer.Set(propagationKey, payload)
+	writer.Set(loggingPropagationKey, payload)
 	return nil
 }
 
 func (p *loggerContextPropagator) ExtractToWorkflow(ctx workflow.Context, reader workflow.HeaderReader) (workflow.Context, error) {
-	if raw, ok := reader.Get(propagationKey); ok {
+	if raw, ok := reader.Get(loggingPropagationKey); ok {
 		var fields []LoggerField
 		if err := converter.GetDefaultDataConverter().FromPayload(raw, &fields); err != nil {
 			return ctx, nil
