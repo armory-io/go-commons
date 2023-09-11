@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go.temporal.io/sdk/workflow"
 	"strings"
 )
 
@@ -95,4 +96,8 @@ func (p *ArmoryCloudPrincipal) ToJson() string {
 
 func WithPrincipal(ctx context.Context, principal ArmoryCloudPrincipal) context.Context {
 	return context.WithValue(ctx, principalContextKey{}, principal)
+}
+
+func WithPrincipalWorkflow(ctx workflow.Context, principal ArmoryCloudPrincipal) workflow.Context {
+	return workflow.WithValue(ctx, principalContextKey{}, principal)
 }

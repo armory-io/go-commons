@@ -10,7 +10,7 @@ import (
 func TestExtractLoggerMetadata(t *testing.T) {
 	header := &common.Header{
 		Fields: map[string]*common.Payload{
-			propagationKey: {
+			loggingPropagationKey: {
 				Metadata: map[string][]byte{
 					converter.MetadataEncoding: []byte(converter.MetadataEncodingJSON),
 				},
