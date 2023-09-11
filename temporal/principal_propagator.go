@@ -21,7 +21,7 @@ func NewPrincipalContextPropagator() workflow.ContextPropagator {
 	return &principalContextPropagator{}
 }
 
-// InitializeTestWorkflowEnvironmentContextWithPrincipal should be only be used in tests.
+// InitializeTestWorkflowEnvironmentContextWithPrincipal should only be used in tests.
 func InitializeTestWorkflowEnvironmentContextWithPrincipal(env *testsuite.TestWorkflowEnvironment, principal iam.ArmoryCloudPrincipal) error {
 	// Ordinarily this would come in through the context.Context passed to workflow start function,
 	// but there's no way to pass an initial context to a Temporal test workflow.
