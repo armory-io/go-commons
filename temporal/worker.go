@@ -2,8 +2,8 @@ package temporal
 
 import (
 	"github.com/armory-io/go-commons/opentelemetry"
+	"github.com/samber/lo"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 )
 
@@ -16,7 +16,15 @@ func WorkerProviderProvider(tracingConfig opentelemetry.Configuration) WorkerPro
 }
 
 func (w *WorkerProvider) NewWorker(c client.Client, taskQueue string) (worker.Worker, error) {
-	interceptors := []interceptor.WorkerInterceptor{newWorkflowContextInterceptor()}
+	return w.NewWorkerWithOptions(c, taskQueue, &worker.Options{})
+}
+
+func (w *WorkerProvider) NewWorkerWithOptions(c client.Client, taskQueue string, options *worker.Options) (worker.Worker, error) {
+	return w.newWorker(c, taskQueue, lo.Ternary(options == nil, &worker.Options{}, options))
+}
+
+func (w *WorkerProvider) newWorker(c client.Client, taskQueue string, opts *worker.Options) (worker.Worker, error) {
+	opts.Interceptors = append(opts.Interceptors, newWorkflowContextInterceptor())
 
 	// The no-op trace provider causes the interceptor to crash, which
 	// is why this package knows about the tracing config :(
@@ -25,10 +33,8 @@ func (w *WorkerProvider) NewWorker(c client.Client, taskQueue string) (worker.Wo
 		if err != nil {
 			return nil, err
 		}
-		interceptors = append(interceptors, otelInterceptor)
+		opts.Interceptors = append(opts.Interceptors, otelInterceptor)
 	}
 
-	return worker.New(c, taskQueue, worker.Options{
-		Interceptors: interceptors,
-	}), nil
+	return worker.New(c, taskQueue, *opts), nil
 }
