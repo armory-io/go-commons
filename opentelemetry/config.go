@@ -29,7 +29,6 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
-	"go.opentelemetry.io/otel/metric/global"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -144,7 +143,7 @@ func NewMeterProvider(
 		provider = metric.NewMeterProvider(metric.WithReader(reader))
 	}
 
-	global.SetMeterProvider(provider)
+	otel.SetMeterProvider(provider)
 
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
