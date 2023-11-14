@@ -20,12 +20,14 @@ func TestNewClientRequest(t *testing.T) {
 	ctx := iam.WithPrincipal(context.Background(), iam.ArmoryCloudPrincipal{
 		OrgId: orgID,
 		EnvId: envID,
+		Name:  "principal-or-principle?",
 	})
 
 	s := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		assert.Equal(t, "admin", request.Header.Get(adminSecretHeader))
 		assert.Equal(t, orgID, request.Header.Get(orgIDHeader))
 		assert.Equal(t, envID, request.Header.Get(envIDHeader))
+		assert.Equal(t, "principal-or-principle?", request.Header.Get(principalNameHeader))
 		assert.Equal(t, superuserRole, request.Header.Get(roleHeader))
 
 		_, err := writer.Write(lo.Must(json.Marshal(map[string]any{

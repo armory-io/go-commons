@@ -13,11 +13,12 @@ var (
 )
 
 const (
-	adminSecretHeader = "x-hasura-admin-secret"
-	orgIDHeader       = "x-hasura-org-id"
-	envIDHeader       = "x-hasura-env-id"
-	roleHeader        = "x-hasura-role"
-	superuserRole     = "armory:hasura:admin"
+	adminSecretHeader   = "x-hasura-admin-secret"
+	orgIDHeader         = "x-hasura-org-id"
+	envIDHeader         = "x-hasura-env-id"
+	principalNameHeader = "x-hasura-principal-name"
+	roleHeader          = "x-hasura-role"
+	superuserRole       = "armory:hasura:admin"
 )
 
 type Configuration struct {
@@ -60,6 +61,7 @@ func (d *doer) Do(request *http.Request) (*http.Response, error) {
 
 	request.Header.Add(orgIDHeader, principal.OrgId)
 	request.Header.Add(envIDHeader, principal.EnvId)
+	request.Header.Add(principalNameHeader, principal.Name)
 	request.Header.Add(roleHeader, superuserRole)
 
 	return d.client.Do(request)
