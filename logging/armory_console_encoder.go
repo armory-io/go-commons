@@ -243,6 +243,8 @@ func (c *consoleEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) 
 }
 
 func (c *consoleEncoder) writeContext(line *buffer.Buffer, fields []zapcore.Field) (string, string) {
+	var stack string
+
 	clone := c.Clone().(*consoleEncoder)
 	for _, field := range fields {
 		field.AddTo(clone)
@@ -252,12 +254,6 @@ func (c *consoleEncoder) writeContext(line *buffer.Buffer, fields []zapcore.Fiel
 	fieldsToLog := lo.PickBy(clone.m.Fields, func(_ string, value any) bool {
 		return !reflect.ValueOf(&value).Elem().IsZero()
 	})
-
-	var stack string
-	if fieldsToLog["stacktrace"] != nil {
-		stack = fieldsToLog["stacktrace"].(string)
-		delete(fieldsToLog, "stacktrace")
-	}
 
 	// delete some redundant fields
 	delete(fieldsToLog, "stack")
